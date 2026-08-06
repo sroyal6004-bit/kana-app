@@ -107,6 +107,10 @@ td.hidden .cr,td.hidden .ck{visibility:hidden}
 .face .line{font-size:17px;color:var(--teal);margin-top:12px;font-weight:700}
 .face .hint{position:absolute;bottom:16px;font-size:12px;color:var(--ink3)}
 .spk{position:absolute;top:14px;right:16px;width:40px;height:40px;border-radius:12px;background:var(--bg2);display:grid;place-items:center;font-size:18px}
+.starbtn{position:absolute;top:14px;left:16px;width:40px;height:40px;border-radius:12px;background:var(--bg2);display:grid;place-items:center;font-size:23px;line-height:1;color:var(--ink3);z-index:3}
+.starbtn.on{color:var(--gold)}
+.wstar{flex-shrink:0;width:40px;height:40px;border-radius:10px;display:grid;place-items:center;font-size:21px;line-height:1;color:var(--ink3);background:var(--card2)}
+.wstar.on{color:var(--gold)}
 .fbtns{display:flex;gap:12px;width:100%;max-width:330px}
 .fbtns button{flex:1;padding:15px;border-radius:16px;font-size:16px;font-weight:800}
 .b-no{background:var(--card2);color:var(--ink2)}
@@ -181,6 +185,9 @@ nav button.on{color:var(--teal)}
   </div>
   <div id="travelChips" style="display:none">
     <div class="chips" id="catChips"></div>
+  </div>
+  <div class="chips" id="starRow" style="margin-top:8px">
+    <button class="chip gold" id="starChip">⭐ 즐겨찾기만 보기</button>
   </div>
 </header>
 
@@ -429,17 +436,20 @@ const SAKEREC=[
 ];
 
 /* ============ STATE ============ */
-const LS='kana_progress_v1',LSC='kana_cfg_v1';
+const LS='kana_progress_v1',LSC='kana_cfg_v1',LSF='kana_stars_v1';
 let progress=load(LS,{});
+let stars=load(LSF,{});   // 즐겨찾기: {key:{v:1|0, u:ms}}  (v=1 별표, v=0 해제)
 const catsDefault=Object.fromEntries(CATS.map(([k])=>[k,true]));
-let cfg=Object.assign({deck:'kana',script:'both',sets:{gojuon:true,dakuten:true,yoon:false},dir:'k2r',tdir:'j2k',rev:0,tableScript:'hira',cats:catsDefault,syncCode:''},load(LSC,{}));
+let cfg=Object.assign({deck:'kana',script:'both',sets:{gojuon:true,dakuten:true,yoon:false},dir:'k2r',tdir:'j2k',rev:0,tableScript:'hira',cats:catsDefault,syncCode:'',starOnly:0},load(LSC,{}));
 if(!cfg.cats)cfg.cats=catsDefault; for(const[k]of CATS)if(!(k in cfg.cats))cfg.cats[k]=true;
 let mode='table';
 function load(k,d){try{return JSON.parse(localStorage.getItem(k))||d}catch{return d}}
-function save(){localStorage.setItem(LS,JSON.stringify(progress));localStorage.setItem(LSC,JSON.stringify(cfg));}
+function save(){localStorage.setItem(LS,JSON.stringify(progress));localStorage.setItem(LSC,JSON.stringify(cfg));localStorage.setItem(LSF,JSON.stringify(stars));}
 const MASTERY=4;
 function getP(key){return progress[key]||(progress[key]={s:0,c:0,w:0,st:0})}
 function isMaster(key){const p=progress[key];return p&&p.st>=MASTERY}
+function isStar(key){const s=stars[key];return !!(s&&s.v===1)}
+function toggleStar(key){const on=isStar(key);stars[key]={v:on?0:1,u:Date.now()};save();refreshStats();syncPush();toast(on?'즐겨찾기 해제':'⭐ 즐겨찾기에 추가');return !on;}
 
 function pool(){
   const out=[];
@@ -453,7 +463,7 @@ function pool(){
     for(const wd of TRAVEL){ if(!cfg.cats[wd.cat])continue;
       out.push({key:wd.jp,disp:wd.jp,sub:(wd.jp===wd.y?'':wd.y),r:wd.r,ko:wd.ko,say:wd.y,grp:wd.cat});}
   }
-  return out;
+  return cfg.starOnly?out.filter(x=>isStar(x.key)):out;
 }
 function activePool(){let p=pool();if(cfg.rev){const f=p.filter(x=>!isMaster(x.key));if(f.length>=4)return f;}return p;}
 function weight(x){const p=progress[x.key];if(!p||p.s===0)return 6;return Math.max(1,Math.min(12,1+p.w*3-p.st));}
@@ -476,8 +486,33 @@ function refreshStats(){
   const acc=c+w>0?Math.round(c/(c+w)*100):null;stAcc.textContent=acc===null?'–':acc+'%';stAccBar.style.width=(acc||0)+'%';
 }
 
+/* 카드형 목록 공통 배선: 탭하면 발음 읽기, 별(☆/★) 토글 */
+function wireCards(){
+  main.querySelectorAll('.wcard').forEach(el=>el.onclick=ev=>{
+    if(ev.target.closest('.wstar'))return;
+    say(el.dataset.say);const p=getP(el.dataset.key);p.s++;p.u=Date.now();save();refreshStats();syncPush();
+  });
+  main.querySelectorAll('.wstar').forEach(b=>b.onclick=ev=>{
+    ev.stopPropagation();const k=b.dataset.key;const on=toggleStar(k);
+    b.classList.toggle('on',on);b.textContent=on?'★':'☆';
+    if(cfg.starOnly&&!on){const card=b.closest('.wcard');if(card)card.remove();}
+  });
+}
+/* 즐겨찾기만 보기: 가나를 카드로 나열 */
+function renderStarCards(list){
+  if(!list.length){main.innerHTML='<div class="empty-msg">⭐ 즐겨찾기한 글자가 없어요.<br>플래시카드의 ☆ 또는 목록의 ☆를 눌러 추가하세요.</div>';return;}
+  let html=`<div class="tbl-head"><h3>⭐ 즐겨찾기</h3><span class="cnt">${list.length}자 · 탭하면 발음</span></div>`;
+  for(const x of list){const done=isMaster(x.key);
+    html+=`<div class="wcard ${done?'done':''}" data-key="${x.key}" data-say="${x.say}">
+      <div class="wl"><div class="wj jp">${x.disp}</div>${x.sub?`<div class="wy jp">${x.sub}</div>`:''}</div>
+      <div class="wr"><span class="wrom">${x.r}</span><span class="wko">${x.ko}</span></div>
+      <button class="wstar on" data-key="${x.key}">★</button></div>`;}
+  main.innerHTML=html;wireCards();
+}
+
 /* ===== TABLE (kana) ===== */
 function renderTable(){
+  if(cfg.starOnly){renderStarCards(pool());return;}
   const sc=cfg.script; // hira | kata | both
   const activeSets=Object.keys(SETS).filter(s=>cfg.sets[s]);
   if(!activeSets.length){main.innerHTML='<div class="empty-msg">위에서 연습할 세트를 하나 이상 골라 주세요 🙂</div>';return;}
@@ -504,23 +539,27 @@ function renderTable(){
     if(!rev){td.dataset.keys.split('|').forEach(k=>{const p=getP(k);p.s++;p.u=Date.now();});save();refreshStats();syncPush();}});
 }
 
-/* ===== LIST (travel) ===== */
+/* ===== LIST (travel) — 뜻을 항상 보여주고, 탭하면 발음 읽기 + 별표 ===== */
 function renderList(){
   const active=CATS.filter(([k])=>cfg.cats[k]);
   if(!active.length){main.innerHTML='<div class="empty-msg">위에서 카테고리를 하나 이상 골라 주세요 🙂</div>';return;}
-  let html='';
+  let html='';let total=0;
   for(const[ck,cname]of active){
-    const items=TRAVEL.filter(w=>w.cat===ck);
-    html+=`<div class="tbl-head"><h3>${cname}</h3><span class="cnt">${items.length}개 · 탭하면 뜻·발음</span></div>`;
-    for(const w of items){const p=progress[w.jp];const done=isMaster(w.jp);
+    let items=TRAVEL.filter(w=>w.cat===ck);
+    if(cfg.starOnly)items=items.filter(w=>isStar(w.jp));
+    if(!items.length)continue;
+    total+=items.length;
+    html+=`<div class="tbl-head"><h3>${cname}</h3><span class="cnt">${items.length}개 · 탭하면 발음</span></div>`;
+    for(const w of items){const p=progress[w.jp];const done=isMaster(w.jp);const on=isStar(w.jp);
       const dc=done?'var(--teal)':(p&&p.w>p.c?'var(--coral)':(p&&p.s?'var(--gold)':'transparent'));
       const yomi=w.jp===w.y?'':`<div class="wy jp">${w.y}</div>`;
-      html+=`<div class="wcard hidden ${done?'done':''}" data-key="${w.jp}" data-say="${w.y}"><span class="dot" style="background:${dc}"></span>
+      html+=`<div class="wcard ${done?'done':''}" data-key="${w.jp}" data-say="${w.y}"><span class="dot" style="background:${dc}"></span>
         <div class="wl"><div class="wj jp">${w.jp}</div>${yomi}</div>
-        <div class="wr"><span class="wrom">${w.r}</span><span class="wko">${w.ko}</span></div></div>`;}
+        <div class="wr"><span class="wrom">${w.r}</span><span class="wko">${w.ko}</span></div>
+        <button class="wstar ${on?'on':''}" data-key="${w.jp}">${on?'★':'☆'}</button></div>`;}
   }
-  main.innerHTML=html;
-  main.querySelectorAll('.wcard').forEach(el=>el.onclick=()=>{const rev=!el.classList.contains('hidden');el.classList.toggle('hidden');say(el.dataset.say);if(!rev){const p=getP(el.dataset.key);p.s++;p.u=Date.now();save();refreshStats();syncPush();}});
+  if(cfg.starOnly&&!total){main.innerHTML='<div class="empty-msg">⭐ 즐겨찾기한 여행 단어가 없어요.<br>단어의 ☆를 눌러 추가하세요.</div>';return;}
+  main.innerHTML=html;wireCards();
 }
 
 /* ===== FLASH ===== */
@@ -530,7 +569,7 @@ function renderFlash(){
   if(list.length<1){main.innerHTML='<div class="empty-msg">연습할 항목이 없어요.<br>세트·카테고리·복습 설정을 확인해 주세요.</div>';return;}
   main.innerHTML=`<div class="flashwrap">
     <div class="flip" id="flip"><div class="inner">
-      <div class="face front"><button class="spk" id="spk1">🔊</button><div class="big jp" id="fFront"></div><div class="sub jp" id="fSub"></div><div class="hint">탭하면 정답</div></div>
+      <div class="face front"><button class="starbtn" id="fStar" aria-label="즐겨찾기">☆</button><button class="spk" id="spk1">🔊</button><div class="big jp" id="fFront"></div><div class="sub jp" id="fSub"></div><div class="hint">탭하면 정답</div></div>
       <div class="face back"><button class="spk" id="spk2">🔊</button><div class="big" id="fBack"></div><div class="line" id="fLine"></div><div class="hint">탭하면 뒤집기</div></div>
     </div></div>
     <div class="fbtns"><button class="b-no" id="fNo">아직 몰라요</button><button class="b-yes" id="fYes">알아요</button></div>
@@ -539,9 +578,11 @@ function renderFlash(){
   flip.onclick=()=>{flashFlipped=!flashFlipped;flip.classList.toggle('flipped',flashFlipped);if(flashFlipped)say(flashCur.say);};
   spk1.onclick=e=>{e.stopPropagation();say(flashCur.say);};
   spk2.onclick=e=>{e.stopPropagation();say(flashCur.say);};
+  document.getElementById('fStar').onclick=e=>{e.stopPropagation();toggleStar(flashCur.key);updateFlashStar();};
   fNo.onclick=()=>grade(false);fYes.onclick=()=>grade(true);
   nextFlash();
 }
+function updateFlashStar(){const b=document.getElementById('fStar');if(b&&flashCur){const on=isStar(flashCur.key);b.classList.toggle('on',on);b.textContent=on?'★':'☆';}}
 function nextFlash(){
   const list=activePool();flashCur=pickWeighted(list,flashCur&&flashCur.key);flashFlipped=false;
   const flip=document.getElementById('flip');if(flip)flip.classList.remove('flipped');
@@ -552,6 +593,7 @@ function nextFlash(){
   if(kana){fBack.textContent=flashCur.r;fBack.style.color='var(--teal)';fBack.style.fontSize='46px';fLine.textContent=flashCur.ko;fLine.style.color='var(--ink2)';}
   else{fBack.textContent=flashCur.ko;fBack.style.color='var(--ink)';fBack.style.fontSize='30px';fLine.textContent=flashCur.sub?`${flashCur.sub} · ${flashCur.r}`:flashCur.r;fLine.style.color='var(--teal)';}
   const p=progress[flashCur.key];fMeta.textContent=p?`정답 ${p.c} · 오답 ${p.w}`:'처음 보는 항목';
+  updateFlashStar();
 }
 function grade(ok){const p=getP(flashCur.key);p.s++;if(ok){p.c++;p.st++;}else{p.w++;p.st=0;}p.u=Date.now();save();refreshStats();syncPush();nextFlash();}
 
@@ -590,7 +632,6 @@ function nextQuiz(){
   qEl.textContent=promptTxt;
   yEl.textContent=(cfg.deck==='travel'&&f.pJP&&quizCur.sub)?quizCur.sub:'';
   subEl.textContent=f.sub;
-  if(f.pJP)say(quizCur.say);
   const box=document.getElementById('qChoices');box.innerHTML='';
   for(const o of opts){const b=document.createElement('button');b.className='choice '+(f.aJP?'jp':'');b.textContent=o[f.af];b.dataset.k=o.key;b.onclick=()=>answer(b,o);box.appendChild(b);}
 }
@@ -610,10 +651,11 @@ function render(){
   if(deck==='sakerec'){
     document.getElementById('hTitle').childNodes[0].nodeValue='추천 술';
     document.getElementById('hSub').textContent='삿포로 이자카야 참고';
-    nav.style.display='none';statsRow.style.display='none';
+    nav.style.display='none';statsRow.style.display='none';document.getElementById('starRow').style.display='none';
     renderSakeRec();return;
   }
-  nav.style.display='';statsRow.style.display='';
+  nav.style.display='';statsRow.style.display='';document.getElementById('starRow').style.display='';
+  document.getElementById('starChip').classList.toggle('on',!!cfg.starOnly);
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.mode===mode));
   const kana=deck==='kana';
   document.getElementById('ic0').textContent=kana?'📋':'📖';
@@ -652,6 +694,7 @@ function syncChips(){
   catChips.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',!!cfg.cats[c.dataset.cat]));
   dirSeg.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.dir===cfg.dir));
   revSeg.querySelectorAll('button').forEach(b=>b.classList.toggle('on',String(cfg.rev)===b.dataset.rev));
+  starChip.classList.toggle('on',!!cfg.starOnly);
 }
 
 /* events */
@@ -662,6 +705,7 @@ setChips.onclick=e=>{const c=e.target.closest('.chip');if(!c)return;const s=c.da
 catChips.onclick=e=>{const c=e.target.closest('.chip');if(!c)return;const k=c.dataset.cat;const on=Object.keys(cfg.cats).filter(x=>cfg.cats[x]);
   if(cfg.cats[k]&&on.length===1){toast('최소 한 카테고리는 필요해요');return;}cfg.cats[k]=!cfg.cats[k];save();syncChips();render();};
 nav.onclick=e=>{const b=e.target.closest('button');if(!b)return;mode=b.dataset.mode;render();};
+starChip.onclick=()=>{cfg.starOnly=cfg.starOnly?0:1;save();syncChips();render();if(cfg.starOnly)toast('⭐ 즐겨찾기한 것만 보여줘요');};
 dirSeg.onclick=e=>{const b=e.target.closest('button');if(!b)return;cfg.dir=b.dataset.dir;save();syncChips();if(mode==='quiz'&&cfg.deck==='kana')renderQuiz();};
 revSeg.onclick=e=>{const b=e.target.closest('button');if(!b)return;cfg.rev=+b.dataset.rev;save();syncChips();render();};
 
@@ -677,12 +721,13 @@ window.addEventListener('popstate',()=>{if(!uiStack.length)return;const t=uiStac
 gear.onclick=openSheet;document.getElementById('scrim').onclick=uiBack;
 
 /* backup */
-btnExport.onclick=()=>{const data={app:'kana',v:2,exported:Date.now(),progress,cfg};const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+btnExport.onclick=()=>{const data={app:'kana',v:3,exported:Date.now(),progress,stars,cfg};const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='kana-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('백업 파일을 내보냈어요');};
 btnImport.onclick=()=>fileImport.click();
 fileImport.onchange=e=>{const file=e.target.files[0];if(!file)return;const rd=new FileReader();
   rd.onload=()=>{try{const d=JSON.parse(rd.result);if(d.progress){for(const k in d.progress){const a=progress[k]||{s:0,c:0,w:0,st:0};const b=d.progress[k];
     progress[k]={s:Math.max(a.s,b.s||0),c:Math.max(a.c,b.c||0),w:Math.max(a.w,b.w||0),st:Math.max(a.st,b.st||0),u:Date.now()};}}
+    if(d.stars){for(const k in d.stars){const b=d.stars[k]||{};const a=stars[k];const bu=b.u||0,au=a?(a.u||0):0;if(!a||bu>=au)stars[k]={v:b.v?1:0,u:bu||Date.now()};}}
     if(d.cfg){const keepCode=cfg.syncCode;cfg=Object.assign(cfg,d.cfg);cfg.syncCode=keepCode;}save();buildCatChips();syncChips();render();syncPush();toast('백업을 불러왔어요');}catch{toast('파일을 읽을 수 없어요');}};
   rd.readAsText(file);fileImport.value='';};
 btnReset.onclick=()=>{if(confirm('진도를 모두 초기화할까요? (되돌릴 수 없어요)')){progress={};save();render();toast('초기화했어요');}};
@@ -708,16 +753,23 @@ function initCloud(){
 function cloudProgress(){ // Firestore에 저장할 형태(각 항목에 u 타임스탬프 보장)
   const o={};for(const k in progress){const p=progress[k];o[k]={s:p.s||0,c:p.c||0,w:p.w||0,st:p.st||0,u:p.u||0};}return o;
 }
+function cloudStars(){const o={};for(const k in stars){const s=stars[k];o[k]={v:s.v?1:0,u:s.u||0};}return o;}
+function cloudDoc(){return {progress:cloudProgress(),stars:cloudStars(),_updatedAt:Date.now(),_kana:true};}
 function syncPush(){
   if(!cloudOn||applyingRemote||!fdb||!cfg.syncCode)return;
   clearTimeout(pushT);
-  pushT=setTimeout(()=>{try{docRef().set({progress:cloudProgress(),_updatedAt:Date.now(),_kana:true});}catch(e){console.warn('push failed',e);}},600);
+  pushT=setTimeout(()=>{try{docRef().set(cloudDoc());}catch(e){console.warn('push failed',e);}},600);
 }
-function mergeRemote(rp){ // 항목별 최신(u) 우선 병합
-  if(!rp||typeof rp!=='object')return false;let changed=false;
-  for(const k in rp){const r=rp[k];if(!r||typeof r!=='object')continue;
+function mergeRemote(data){ // 항목별 최신(u) 우선 병합 (진도 + 즐겨찾기)
+  if(!data||typeof data!=='object')return false;let changed=false;
+  const rp=data.progress;
+  if(rp&&typeof rp==='object')for(const k in rp){const r=rp[k];if(!r||typeof r!=='object')continue;
     const l=progress[k],ru=r.u||0,lu=l?(l.u||0):0;
     if(!l||ru>lu){progress[k]={s:r.s||0,c:r.c||0,w:r.w||0,st:r.st||0,u:ru};changed=true;}}
+  const rs=data.stars;
+  if(rs&&typeof rs==='object')for(const k in rs){const r=rs[k];if(!r||typeof r!=='object')continue;
+    const l=stars[k],ru=r.u||0,lu=l?(l.u||0):0;
+    if(!l||ru>lu){stars[k]={v:r.v?1:0,u:ru};changed=true;}}
   return changed;
 }
 function subscribeSync(){
@@ -726,7 +778,7 @@ function subscribeSync(){
   syncSub=docRef().onSnapshot(snap=>{
     if(snap.metadata.hasPendingWrites)return; // 내가 방금 쓴 반향은 무시
     if(!snap.exists)return;
-    if(mergeRemote(snap.data().progress)){applyingRemote=true;save();applyingRemote=false;render();toast('☁️ 다른 기기의 기록을 반영했어요');}
+    if(mergeRemote(snap.data())){applyingRemote=true;save();applyingRemote=false;render();toast('☁️ 다른 기기의 기록을 반영했어요');}
   },err=>{console.warn('snapshot err',err);setSyncStatus('동기화 오류 ['+((err&&err.code)||'?')+']','var(--bad)');});
 }
 async function connectSync(code,opt){
@@ -737,8 +789,8 @@ async function connectSync(code,opt){
   cloudOn=true;setSyncStatus('연결 중…','var(--gold)');
   try{
     const ref=docRef();const snap=await ref.get();
-    if(snap.exists&&mergeRemote(snap.data().progress)){applyingRemote=true;save();applyingRemote=false;render();}
-    await ref.set({progress:cloudProgress(),_updatedAt:Date.now(),_kana:true}); // 이 기기 진도도 올려 두기
+    if(snap.exists&&mergeRemote(snap.data())){applyingRemote=true;save();applyingRemote=false;render();}
+    await ref.set(cloudDoc()); // 이 기기 진도·즐겨찾기도 올려 두기
     subscribeSync();updateSyncUI();
     if(!opt.silent)toast('☁️ 기기 간 동기화를 켰어요');
     return true;
