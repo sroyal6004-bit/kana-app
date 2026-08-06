@@ -1,0 +1,16 @@
+{
+  "name": "가나 연습 · ひらがな カタカナ",
+  "short_name": "가나연습",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#12141f",
+  "theme_color": "#12141f",
+  "lang": "ko",
+  "description": "히라가나·가타카나 복습 연습 앱 (표·플래시카드·퀴즈, 오답 가중 복습)",
+  "icons": [
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"/>
+<meta name="theme-color" content="#12141f"/>
+<link rel="icon" href="data:,"/>
+<link rel="manifest" href="./manifest.json"/>
+<link rel="apple-touch-icon" href="./icon-192.png"/>
+<title>가나 · 여행 단어 연습</title>
+<!-- 기기 간 동기화(선택): Firebase. 오프라인이면 로드 실패해도 앱은 그대로 동작 -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="./firebase-config.js"></script>
+<style>
+:root{
+  --bg:#12141f; --bg2:#181a27; --card:#1f2231; --card2:#262a3c;
+  --ink:#eef0f7; --ink2:#a6adc4; --ink3:#6d7592;
+  --teal:#57d2c8; --teal-d:#2f9a92;
+  --coral:#e8785f; --coral-d:#c85a44;
+  --gold:#e6b455; --good:#5ec98a; --bad:#e46a6a;
+  --line:#2d3245; --r:16px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sans KR',sans-serif;overscroll-behavior-y:none}
+body{max-width:560px;margin:0 auto;min-height:100vh;padding:0 0 calc(84px + env(safe-area-inset-bottom));}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+.jp{font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',YuGothic,'Noto Sans JP','Noto Sans CJK JP',sans-serif}
+
+header{position:sticky;top:0;z-index:20;background:var(--bg);box-shadow:0 10px 18px -12px rgba(0,0,0,.75);padding:calc(12px + env(safe-area-inset-top)) 16px 10px;}
+.hrow{display:flex;align-items:center;gap:10px}
+.htitle{font-size:20px;font-weight:800;letter-spacing:-.3px}
+.htitle small{font-weight:600;color:var(--ink3);font-size:13px;margin-left:6px}
+.gear{margin-left:auto;width:40px;height:40px;border-radius:12px;background:var(--card);display:grid;place-items:center;font-size:18px}
+.stats{display:flex;gap:8px;margin-top:10px}
+.stat{flex:1;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:9px 12px}
+.stat .k{font-size:11px;color:var(--ink3);font-weight:600}
+.stat .v{font-size:19px;font-weight:800;margin-top:2px}
+.stat .v small{font-size:12px;color:var(--ink3);font-weight:600}
+.bar{height:6px;border-radius:4px;background:var(--card2);overflow:hidden;margin-top:7px}
+.bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--teal),var(--gold))}
+
+.chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.chip{padding:7px 13px;border-radius:999px;background:var(--card);border:1px solid var(--line);font-size:13px;font-weight:700;color:var(--ink2);transition:.12s}
+.chip.on{background:var(--teal-d);border-color:var(--teal);color:#fff}
+.chip.coral.on{background:var(--coral-d);border-color:var(--coral)}
+.chip.gold.on{background:#8a6a24;border-color:var(--gold);color:#fff}
+.seg{display:inline-flex;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:3px;gap:2px}
+.seg button{padding:6px 14px;border-radius:999px;font-size:13px;font-weight:700;color:var(--ink2)}
+.seg button.on{background:var(--card2);color:var(--ink)}
+.deckseg{width:100%;justify-content:stretch;margin-top:12px}
+.deckseg button{flex:1;text-align:center;padding:9px}
+.deckseg button.on{background:linear-gradient(90deg,var(--teal-d),#3a7f8f);color:#fff}
+
+main{padding:6px 16px 20px}
+
+/* table */
+.tbl-head{display:flex;align-items:center;gap:10px;margin:14px 2px 8px}
+.tbl-head h3{margin:0;font-size:15px;font-weight:800}
+.tbl-head .cnt{font-size:12px;color:var(--ink3);font-weight:700}
+table.kana{width:100%;border-collapse:separate;border-spacing:6px}
+table.kana td{background:var(--card);border:1px solid var(--line);border-radius:12px;text-align:center;padding:8px 2px;position:relative;min-height:58px;vertical-align:middle}
+table.kana td.empty{background:transparent;border:none}
+table.kana td.done{border-color:var(--teal);box-shadow:inset 0 0 0 1px var(--teal-d)}
+td .cg{font-size:22px;font-weight:700;line-height:1}
+td .cg-both{font-size:17px;font-weight:700;line-height:1.25}
+td .cg-both.k{color:var(--ink2)}
+td .cr{font-size:11px;color:var(--ink2);margin-top:3px;font-weight:700}
+td .ck{font-size:10px;color:var(--ink3);margin-top:1px}
+td .dot{position:absolute;top:5px;right:6px;width:6px;height:6px;border-radius:50%}
+td.hidden .cr,td.hidden .ck{visibility:hidden}
+
+/* travel list */
+.wcard{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:8px;position:relative}
+.wcard.done{border-color:var(--teal)}
+.wl{flex:1;min-width:0}
+.wj{font-size:21px;font-weight:800;line-height:1.2}
+.wy{font-size:13px;color:var(--ink3);margin-top:3px}
+.wr{text-align:right;flex-shrink:0;max-width:48%}
+.wrom{display:block;font-size:13px;color:var(--teal);font-weight:700}
+.wko{display:block;font-size:15px;color:var(--ink);font-weight:700;margin-top:3px}
+.wcard.hidden .wko{visibility:hidden}
+.wcard .dot{position:absolute;top:8px;left:8px;width:6px;height:6px;border-radius:50%}
+.wspk{font-size:16px;color:var(--ink3);padding:4px}
+.srec-intro{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin:10px 0 14px;font-size:13px;color:var(--ink2);line-height:1.6}
+.srec-intro .srec-h{font-size:15px;font-weight:800;color:var(--ink);margin-bottom:6px}
+.srec-intro p{margin:4px 0}
+.srec{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 15px;margin-bottom:9px}
+.srec-top{display:flex;align-items:center;gap:8px}
+.srec-name{font-size:19px;font-weight:800;flex:1;line-height:1.25}
+.srec-star{color:var(--gold);margin-left:4px}
+.srec-read{font-size:13px;color:var(--ink3);margin-top:3px}
+.srec-meta{font-size:13px;color:var(--ink2);margin-top:7px;font-weight:600}
+.srec-chip{display:inline-block;background:var(--card2);border-radius:8px;padding:1px 8px;font-size:12px;margin-left:6px;font-weight:700}
+.srec-note{font-size:13px;color:var(--gold);margin-top:6px;font-weight:700}
+
+/* flash */
+.flashwrap{display:flex;flex-direction:column;align-items:center;gap:18px;margin-top:20px}
+.flip{width:100%;max-width:330px;aspect-ratio:1/1;perspective:1200px}
+.flip .inner{position:relative;width:100%;height:100%;transition:transform .5s;transform-style:preserve-3d}
+.flip.flipped .inner{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;backface-visibility:hidden;border-radius:26px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:22px;text-align:center;background:var(--card);border:1px solid var(--line)}
+.face.back{transform:rotateY(180deg);background:linear-gradient(160deg,var(--card2),var(--card))}
+.face .big{font-weight:800;line-height:1.15;word-break:keep-all}
+.face .sub{font-size:20px;color:var(--ink2);margin-top:10px;font-weight:700}
+.face .line{font-size:17px;color:var(--teal);margin-top:12px;font-weight:700}
+.face .hint{position:absolute;bottom:16px;font-size:12px;color:var(--ink3)}
+.spk{position:absolute;top:14px;right:16px;width:40px;height:40px;border-radius:12px;background:var(--bg2);display:grid;place-items:center;font-size:18px}
+.fbtns{display:flex;gap:12px;width:100%;max-width:330px}
+.fbtns button{flex:1;padding:15px;border-radius:16px;font-size:16px;font-weight:800}
+.b-no{background:var(--card2);color:var(--ink2)}
+.b-yes{background:var(--teal-d);color:#fff}
+.tap-h{font-size:13px;color:var(--ink3)}
+
+/* quiz */
+.quizwrap{margin-top:16px}
+.qbar{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.qprompt{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:28px 16px;text-align:center;margin-bottom:16px}
+.qprompt .q{font-size:56px;font-weight:800;line-height:1.15;word-break:keep-all}
+.qprompt .q.small{font-size:34px}
+.qprompt .qy{font-size:16px;color:var(--ink3);margin-top:8px;font-weight:700}
+.qprompt .sub{font-size:13px;color:var(--ink3);margin-top:10px;font-weight:700}
+.choices{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.choice{padding:16px 8px;border-radius:16px;background:var(--card);border:1px solid var(--line);font-size:20px;font-weight:800;transition:.12s;min-height:60px;word-break:keep-all}
+.choice.jp{font-size:26px}
+.choice.ok{background:var(--teal-d);border-color:var(--good);color:#fff}
+.choice.no{background:#3a2530;border-color:var(--bad);color:#ffb4b4}
+.choice:disabled{opacity:.6}
+.qmeta{display:flex;justify-content:space-between;margin-top:16px;font-size:13px;color:var(--ink3);font-weight:700}
+
+nav{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;max-width:560px;margin:0 auto;background:var(--bg2);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;padding:11px 0 12px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:700;color:var(--ink3)}
+nav button .ic{font-size:20px}
+nav button.on{color:var(--teal)}
+
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:40;opacity:0;pointer-events:none;transition:.2s}
+.scrim.show{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;max-width:560px;margin:0 auto;background:var(--bg2);border-radius:22px 22px 0 0;border-top:1px solid var(--line);padding:8px 18px calc(20px + env(safe-area-inset-bottom));transform:translateY(100%);transition:.25s}
+.sheet.show{transform:translateY(0)}
+.grab{width:40px;height:4px;border-radius:2px;background:var(--line);margin:8px auto 12px}
+.sheet h3{margin:6px 0 4px;font-size:16px;font-weight:800}
+.srow{padding:14px 2px;border-bottom:1px solid var(--line)}
+.srow:last-child{border:none}
+.srow .lab{font-size:14px;font-weight:700;margin-bottom:9px}
+.linkbtn{padding:12px 14px;border-radius:12px;background:var(--card);font-weight:700;font-size:14px;width:100%;text-align:left;border:1px solid var(--line);margin-top:8px}
+.linkbtn.danger{color:#ffb4b4}
+.toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#000d;color:#fff;padding:10px 16px;border-radius:12px;font-size:13px;font-weight:700;z-index:60;opacity:0;transition:.2s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1}
+.empty-msg{text-align:center;color:var(--ink3);padding:60px 20px;font-weight:700;line-height:1.7}
+</style>
+</head>
+<body>
+<header>
+  <div class="hrow">
+    <div class="htitle" id="hTitle">가나 연습<small id="hSub">ひらがな · カタカナ</small></div>
+    <button class="gear" id="gear" aria-label="설정">⚙️</button>
+  </div>
+  <div class="stats" id="statsRow">
+    <div class="stat"><div class="k" id="stLabel">익힌 글자</div><div class="v"><span id="stMaster">0</span><small id="stTotal">/0</small></div>
+      <div class="bar"><i id="stBar" style="width:0%"></i></div></div>
+    <div class="stat"><div class="k">정답률</div><div class="v" id="stAcc">–</div>
+      <div class="bar"><i id="stAccBar" style="width:0%;background:linear-gradient(90deg,var(--coral),var(--gold))"></i></div></div>
+  </div>
+  <div class="seg deckseg" id="deckSeg">
+    <button data-deck="kana" class="on">가나</button>
+    <button data-deck="travel">여행 단어</button>
+    <button data-deck="sakerec">추천 술</button>
+  </div>
+  <div id="kanaChips">
+    <div class="chips" id="scriptChips">
+      <button class="chip" data-sc="hira">히라가나</button>
+      <button class="chip" data-sc="kata">가타카나</button>
+      <button class="chip" data-sc="both">둘 다</button>
+    </div>
+    <div class="chips" id="setChips">
+      <button class="chip coral" data-set="gojuon">청음</button>
+      <button class="chip coral" data-set="dakuten">탁음·반탁음</button>
+      <button class="chip coral" data-set="yoon">요음</button>
+    </div>
+  </div>
+  <div id="travelChips" style="display:none">
+    <div class="chips" id="catChips"></div>
+  </div>
+</header>
+
+<main id="main"></main>
+
+<nav id="nav">
+  <button data-mode="table" class="on"><span class="ic" id="ic0">📋</span><span id="lb0">표</span></button>
+  <button data-mode="flash"><span class="ic">🎴</span>플래시</button>
+  <button data-mode="quiz"><span class="ic">✏️</span>퀴즈</button>
+</nav>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet">
+  <div class="grab"></div>
+  <h3>설정</h3>
+  <div class="srow">
+    <div class="lab">📱 ↔ 💻 기기 간 동기화</div>
+    <div id="syncStatus" style="font-size:13px;font-weight:700;margin-bottom:9px;color:var(--ink3)">이 기기에만 저장 중</div>
+    <input id="syncCode" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+      placeholder="연결 코드 (예: mina-japan-2026)"
+      style="width:100%;padding:12px 14px;border-radius:12px;background:var(--card);border:1px solid var(--line);color:var(--ink);font-size:15px;font-weight:700;-webkit-appearance:none"/>
+    <button class="linkbtn" id="btnConnect">🔗 이 코드로 연결하기</button>
+    <button class="linkbtn" id="btnMakeCode">✨ 새 코드 자동 생성</button>
+    <button class="linkbtn danger" id="btnDisconnect" style="display:none">🔌 동기화 끄기 (이 기기만)</button>
+    <div style="font-size:12px;color:var(--ink3);line-height:1.6;margin-top:9px">
+      PC와 폰에 <b style="color:var(--ink2)">같은 코드</b>를 넣으면 진도가 실시간으로 함께 저장돼요.
+      한쪽에서 공부하면 다른 쪽에도 바로 반영됩니다. 코드가 곧 비밀번호이니
+      남이 추측하기 어렵게 정하세요(6자 이상).
+    </div>
+  </div>
+  <div class="srow">
+    <div class="lab">가나 퀴즈 방향</div>
+    <div class="seg" id="dirSeg">
+      <button data-dir="k2r" class="on">가나 → 로마자</button>
+      <button data-dir="r2k">로마자 → 가나</button>
+    </div>
+  </div>
+  <div class="srow">
+    <div class="lab">복습 우선</div>
+    <div class="seg" id="revSeg">
+      <button data-rev="0" class="on">전체 연습</button>
+      <button data-rev="1">익힌 것 숨기기</button>
+    </div>
+  </div>
+  <div class="srow">
+    <div class="lab">진도 관리</div>
+    <button class="linkbtn" id="btnExport">📤 진도 백업 (JSON 내보내기)</button>
+    <button class="linkbtn" id="btnImport">📥 백업 불러오기</button>
+    <input type="file" id="fileImport" accept="application/json" style="display:none"/>
+    <button class="linkbtn danger" id="btnReset">🗑️ 진도 초기화</button>
+  </div>
+  <div class="srow" style="color:var(--ink3);font-size:12px;line-height:1.6">
+    맞히면 익힘 단계가 오르고, 틀리면 그 항목이 더 자주 나와요. 4번 연속 맞히면 “익힘”으로 표시됩니다.
+    진도는 가나·여행 단어 공통으로 저장돼요.
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============ KANA DATA ============ */
+const C=(h,k,r,ko)=>({h,k,r,ko});const _=null;
+const GOJUON=[
+ [C('あ','ア','a','아'),C('い','イ','i','이'),C('う','ウ','u','우'),C('え','エ','e','에'),C('お','オ','o','오')],
+ [C('か','カ','ka','카'),C('き','キ','ki','키'),C('く','ク','ku','쿠'),C('け','ケ','ke','케'),C('こ','コ','ko','코')],
+ [C('さ','サ','sa','사'),C('し','シ','shi','시'),C('す','ス','su','스'),C('せ','セ','se','세'),C('そ','ソ','so','소')],
+ [C('た','タ','ta','타'),C('ち','チ','chi','치'),C('つ','ツ','tsu','츠'),C('て','テ','te','테'),C('と','ト','to','토')],
+ [C('な','ナ','na','나'),C('に','ニ','ni','니'),C('ぬ','ヌ','nu','누'),C('ね','ネ','ne','네'),C('の','ノ','no','노')],
+ [C('は','ハ','ha','하'),C('ひ','ヒ','hi','히'),C('ふ','フ','fu','후'),C('へ','ヘ','he','헤'),C('ほ','ホ','ho','호')],
+ [C('ま','マ','ma','마'),C('み','ミ','mi','미'),C('む','ム','mu','무'),C('め','メ','me','메'),C('も','モ','mo','모')],
+ [C('や','ヤ','ya','야'),_,C('ゆ','ユ','yu','유'),_,C('よ','ヨ','yo','요')],
+ [C('ら','ラ','ra','라'),C('り','リ','ri','리'),C('る','ル','ru','루'),C('れ','レ','re','레'),C('ろ','ロ','ro','로')],
+ [C('わ','ワ','wa','와'),_,_,_,C('を','ヲ','wo','오')],
+ [C('ん','ン','n','응'),_,_,_,_],
+];
+const DAKUTEN=[
+ [C('が','ガ','ga','가'),C('ぎ','ギ','gi','기'),C('ぐ','グ','gu','구'),C('げ','ゲ','ge','게'),C('ご','ゴ','go','고')],
+ [C('ざ','ザ','za','자'),C('じ','ジ','ji','지'),C('ず','ズ','zu','즈'),C('ぜ','ゼ','ze','제'),C('ぞ','ゾ','zo','조')],
+ [C('だ','ダ','da','다'),C('ぢ','ヂ','ji','지'),C('づ','ヅ','zu','즈'),C('で','デ','de','데'),C('ど','ド','do','도')],
+ [C('ば','バ','ba','바'),C('び','ビ','bi','비'),C('ぶ','ブ','bu','부'),C('べ','ベ','be','베'),C('ぼ','ボ','bo','보')],
+ [C('ぱ','パ','pa','파'),C('ぴ','ピ','pi','피'),C('ぷ','プ','pu','푸'),C('ぺ','ペ','pe','페'),C('ぽ','ポ','po','포')],
+];
+const YOON=[
+ [C('きゃ','キャ','kya','캬'),C('きゅ','キュ','kyu','큐'),C('きょ','キョ','kyo','쿄')],
+ [C('しゃ','シャ','sha','샤'),C('しゅ','シュ','shu','슈'),C('しょ','ショ','sho','쇼')],
+ [C('ちゃ','チャ','cha','차'),C('ちゅ','チュ','chu','추'),C('ちょ','チョ','cho','초')],
+ [C('にゃ','ニャ','nya','냐'),C('にゅ','ニュ','nyu','뉴'),C('にょ','ニョ','nyo','뇨')],
+ [C('ひゃ','ヒャ','hya','햐'),C('ひゅ','ヒュ','hyu','휴'),C('ひょ','ヒョ','hyo','효')],
+ [C('みゃ','ミャ','mya','먀'),C('みゅ','ミュ','myu','뮤'),C('みょ','ミョ','myo','묘')],
+ [C('りゃ','リャ','rya','랴'),C('りゅ','リュ','ryu','류'),C('りょ','リョ','ryo','료')],
+ [C('ぎゃ','ギャ','gya','갸'),C('ぎゅ','ギュ','gyu','규'),C('ぎょ','ギョ','gyo','교')],
+ [C('じゃ','ジャ','ja','자'),C('じゅ','ジュ','ju','주'),C('じょ','ジョ','jo','조')],
+ [C('びゃ','ビャ','bya','뱌'),C('びゅ','ビュ','byu','뷰'),C('びょ','ビョ','byo','뵤')],
+ [C('ぴゃ','ピャ','pya','퍄'),C('ぴゅ','ピュ','pyu','퓨'),C('ぴょ','ピョ','pyo','표')],
+];
+const SETS={gojuon:{name:'청음',grid:GOJUON},dakuten:{name:'탁음·반탁음',grid:DAKUTEN},yoon:{name:'요음',grid:YOON}};
+
+/* ============ TRAVEL DATA ============ */
+const W=(jp,y,r,ko,cat)=>({jp,y,r,ko,cat});
+const CATS=[['basic','인사·기본'],['move','공항·이동'],['food','식당·라멘'],['izakaya','이자카야·안주'],['sake','술·음료'],['shop','쇼핑·돈'],['stay','온천·숙소'],['golf','골프'],['sos','긴급·건강'],['num','숫자·시간']];
+const CATNAME=Object.fromEntries(CATS);
+const TRAVEL=[
+ W('こんにちは','こんにちは','konnichiwa','안녕하세요 (낮 인사)','basic'),
+ W('ありがとう','ありがとう','arigatō','고맙습니다','basic'),
+ W('すみません','すみません','sumimasen','실례합니다 / 죄송합니다','basic'),
+ W('お願いします','おねがいします','onegai shimasu','부탁합니다','basic'),
+ W('はい','はい','hai','네','basic'),
+ W('いいえ','いいえ','iie','아니요','basic'),
+ W('大丈夫です','だいじょうぶです','daijōbu desu','괜찮아요','basic'),
+ W('わかりません','わかりません','wakarimasen','모르겠어요','basic'),
+ W('いくらですか','いくらですか','ikura desu ka','얼마예요?','basic'),
+ W('おいしい','おいしい','oishii','맛있다','basic'),
+ W('英語話せますか','えいごはなせますか','eigo hanasemasu ka','영어 할 수 있어요?','basic'),
+ W('これ','これ','kore','이것','basic'),
+
+ W('空港','くうこう','kūkō','공항','move'),
+ W('駅','えき','eki','역','move'),
+ W('電車','でんしゃ','densha','전철','move'),
+ W('地下鉄','ちかてつ','chikatetsu','지하철','move'),
+ W('バス','バス','basu','버스','move'),
+ W('タクシー','タクシー','takushī','택시','move'),
+ W('切符','きっぷ','kippu','표 (승차권)','move'),
+ W('レンタカー','レンタカー','rentakā','렌터카','move'),
+ W('荷物','にもつ','nimotsu','짐','move'),
+ W('どこですか','どこですか','doko desu ka','어디예요?','move'),
+
+ W('ラーメン','ラーメン','rāmen','라멘','food'),
+ W('味噌ラーメン','みそラーメン','miso rāmen','미소 라멘 (홋카이도 명물)','food'),
+ W('スープカレー','スープカレー','sūpu karē','수프카레 (삿포로 명물)','food'),
+ W('ジンギスカン','ジンギスカン','jingisukan','징기스칸 (양고기 구이)','food'),
+ W('海鮮','かいせん','kaisen','해산물','food'),
+ W('蟹','かに','kani','게','food'),
+ W('寿司','すし','sushi','초밥','food'),
+ W('ビール','ビール','bīru','맥주','food'),
+ W('水','みず','mizu','물','food'),
+ W('メニュー','メニュー','menyū','메뉴','food'),
+ W('注文','ちゅうもん','chūmon','주문','food'),
+ W('お会計','おかいけい','okaikei','계산','food'),
+ W('予約','よやく','yoyaku','예약','food'),
+ W('席','せき','seki','자리','food'),
+ W('乾杯','かんぱい','kanpai','건배','food'),
+
+ W('お土産','おみやげ','omiyage','기념품 / 선물','shop'),
+ W('免税','めんぜい','menzei','면세','shop'),
+ W('現金','げんきん','genkin','현금','shop'),
+ W('カード','カード','kādo','카드','shop'),
+ W('コンビニ','コンビニ','konbini','편의점','shop'),
+ W('薬局','やっきょく','yakkyoku','약국','shop'),
+ W('袋','ふくろ','fukuro','봉투','shop'),
+
+ W('ホテル','ホテル','hoteru','호텔','stay'),
+ W('チェックイン','チェックイン','chekku in','체크인','stay'),
+ W('温泉','おんせん','onsen','온천','stay'),
+ W('部屋','へや','heya','방','stay'),
+ W('鍵','かぎ','kagi','열쇠','stay'),
+ W('荷物預かり','にもつあずかり','nimotsu azukari','짐 보관','stay'),
+ W('大浴場','だいよくじょう','daiyokujō','대욕장','stay'),
+
+ W('ゴルフ','ゴルフ','gorufu','골프','golf'),
+ W('ゴルフ場','ゴルフじょう','gorufu-jō','골프장','golf'),
+ W('ティータイム','ティータイム','tī taimu','티타임','golf'),
+ W('カート','カート','kāto','카트','golf'),
+ W('キャディー','キャディー','kyadī','캐디','golf'),
+ W('スコア','スコア','sukoa','스코어','golf'),
+ W('クラブ','クラブ','kurabu','클럽 (골프채)','golf'),
+
+ W('トイレ','トイレ','toire','화장실','sos'),
+ W('病院','びょういん','byōin','병원','sos'),
+ W('薬','くすり','kusuri','약','sos'),
+ W('痛い','いたい','itai','아프다','sos'),
+ W('助けて','たすけて','tasukete','도와주세요','sos'),
+ W('警察','けいさつ','keisatsu','경찰','sos'),
+
+ W('一','いち','ichi','1','num'),
+ W('二','に','ni','2','num'),
+ W('三','さん','san','3','num'),
+ W('四','よん','yon','4','num'),
+ W('五','ご','go','5','num'),
+ W('六','ろく','roku','6','num'),
+ W('七','なな','nana','7','num'),
+ W('八','はち','hachi','8','num'),
+ W('九','きゅう','kyū','9','num'),
+ W('十','じゅう','jū','10','num'),
+ W('円','えん','en','엔 (화폐)','num'),
+ W('時','じ','ji','시 (시각)','num'),
+
+ W('ください','ください','kudasai','주세요','basic'),
+
+ W('刺身','さしみ','sashimi','회','izakaya'),
+ W('刺身盛り合わせ','さしみもりあわせ','sashimi moriawase','모둠회','izakaya'),
+ W('本マグロ','ほんまぐろ','honmaguro','참다랑어','izakaya'),
+ W('サーモン','サーモン','sāmon','연어','izakaya'),
+ W('タコ','タコ','tako','문어','izakaya'),
+ W('かつお','かつお','katsuo','가다랑어','izakaya'),
+ W('アジ','アジ','aji','전갱이','izakaya'),
+ W('ホッケ','ホッケ','hokke','임연수어 (홋카이도 대표 생선)','izakaya'),
+ W('カキ','カキ','kaki','굴','izakaya'),
+ W('シシャモ','シシャモ','shishamo','열빙어 (알 밴 것이 별미)','izakaya'),
+ W('馬刺し','ばさし','basashi','말고기 회','izakaya'),
+ W('タタキ','タタキ','tataki','겉만 살짝 익힌 회','izakaya'),
+ W('フライ','フライ','furai','튀김 (서양식)','izakaya'),
+ W('天ぷら','てんぷら','tenpura','튀김 (일본식)','izakaya'),
+ W('焼き','やき','yaki','구이','izakaya'),
+ W('炭焼き','すみやき','sumiyaki','숯불구이','izakaya'),
+ W('煮込み','にこみ','nikomi','조림 · 스튜','izakaya'),
+ W('味噌','みそ','miso','된장','izakaya'),
+ W('ホルモン','ホルモン','horumon','곱창 · 내장','izakaya'),
+ W('燻製','くんせい','kunsei','훈제','izakaya'),
+ W('海鮮丼','かいせんどん','kaisendon','해산물 덮밥','izakaya'),
+ W('生ラム','なまラム','nama ramu','생양고기 (징기스칸)','izakaya'),
+ W('タレ','タレ','tare','양념장 · 소스','izakaya'),
+ W('串','くし','kushi','꼬치','izakaya'),
+ W('会席料理','かいせきりょうり','kaiseki ryōri','코스요리 (연회)','izakaya'),
+ W('市場','いちば','ichiba','시장','izakaya'),
+ W('道産','どうさん','dōsan','홋카이도산','izakaya'),
+ W('点','てん','ten','종류 (가짓수 셀 때)','izakaya'),
+ W('切れ','きれ','kire','조각 (회 셀 때)','izakaya'),
+ W('尾','び','bi','마리 (생선 셀 때)','izakaya'),
+ W('人前','にんまえ','ninmae','~인분','izakaya'),
+ W('おすすめ','おすすめ','osusume','추천 (메뉴)','izakaya'),
+
+ W('日本酒','にほんしゅ','nihonshu','사케 · 청주','sake'),
+ W('焼酎','しょうちゅう','shōchū','소주','sake'),
+ W('サワー','サワー','sawā','사와 (사워 칵테일)','sake'),
+ W('ソーダ割り','ソーダわり','sōda wari','탄산 희석','sake'),
+ W('芋','いも','imo','고구마 (소주 원료)','sake'),
+ W('麦','むぎ','mugi','보리 (소주 원료)','sake'),
+ W('辛口','からくち','karakuchi','드라이한 맛 (덜 달다)','sake'),
+ W('甘口','あまくち','amakuchi','단맛','sake'),
+ W('純米','じゅんまい','junmai','준마이 (사케 등급)','sake'),
+ W('吟醸','ぎんじょう','ginjō','긴조 (사케 등급)','sake'),
+ W('大吟醸','だいぎんじょう','daiginjō','다이긴조 (최고급)','sake'),
+ W('一合','いちごう','ichigō','한 홉 (사케 양)','sake'),
+ W('アイス','アイス','aisu','아이스크림','sake'),
+];
+
+/* ============ SAKE RECOMMENDATIONS (reference only) ============ */
+const SAKEREC=[
+ {jp:'荷札酒 〜黄水仙〜',y:'にふだざけ',ko:'니후다자케',region:'니가타현',grade:'준마이 다이긴조',smv:'',price:'900',note:'화사한 맛 · 게 요리에 잘 맞음 · 현재 인기',star:true},
+ {jp:'二世古',y:'にせこ',ko:'니세코',region:'홋카이도 아부타초',grade:'토쿠베츠 준마이',smv:'+9',price:'900',note:'홋카이도 로컬 · 게 요리 추천',star:true},
+ {jp:'みむろ杉 〜夏純〜',y:'みむろすぎ',ko:'미무로스기',region:'나라현',grade:'여름 한정 준마이',smv:'+1',price:'1000',note:'이 목록 중 가장 부드러움 · 현재 인기',star:true},
+ {jp:'天美 〜螢天〜',y:'てんび',ko:'텐비',region:'야마구치현',grade:'준마이 긴조',smv:'',price:'900',note:'현재 인기 브랜드',star:true},
+ {jp:'作 〜岡山朝日〜',y:'ざく',ko:'자쿠',region:'미에현',grade:'준마이 다이긴조',smv:'비공개',price:'1200',note:'고급 인기 브랜드',star:false},
+ {jp:'久礼',y:'くれ',ko:'쿠레',region:'고치현',grade:'카라쿠치 준마이',smv:'+10',price:'800',note:'이 목록 중 가장 드라이',star:false},
+ {jp:'ボー・ミッシェル',y:'ボー・ミッシェル',ko:'보 미셸',region:'나가노현',grade:'',smv:'',price:'1000',note:'',star:false},
+];
+
+/* ============ STATE ============ */
+const LS='kana_progress_v1',LSC='kana_cfg_v1';
+let progress=load(LS,{});
+const catsDefault=Object.fromEntries(CATS.map(([k])=>[k,true]));
+let cfg=Object.assign({deck:'kana',script:'both',sets:{gojuon:true,dakuten:true,yoon:false},dir:'k2r',tdir:'j2k',rev:0,tableScript:'hira',cats:catsDefault,syncCode:''},load(LSC,{}));
+if(!cfg.cats)cfg.cats=catsDefault; for(const[k]of CATS)if(!(k in cfg.cats))cfg.cats[k]=true;
+let mode='table';
+function load(k,d){try{return JSON.parse(localStorage.getItem(k))||d}catch{return d}}
+function save(){localStorage.setItem(LS,JSON.stringify(progress));localStorage.setItem(LSC,JSON.stringify(cfg));}
+const MASTERY=4;
+function getP(key){return progress[key]||(progress[key]={s:0,c:0,w:0,st:0})}
+function isMaster(key){const p=progress[key];return p&&p.st>=MASTERY}
+
+function pool(){
+  const out=[];
+  if(cfg.deck==='kana'){
+    const scripts=cfg.script==='both'?['h','k']:(cfg.script==='hira'?['h']:['k']);
+    for(const sk of Object.keys(SETS)){ if(!cfg.sets[sk])continue;
+      for(const row of SETS[sk].grid)for(const c of row){ if(!c)continue;
+        for(const s of scripts){const disp=s==='h'?c.h:c.k;
+          out.push({key:disp,disp,sub:'',r:c.r,ko:c.ko,say:c.h,grp:sk});}}}
+  }else{
+    for(const wd of TRAVEL){ if(!cfg.cats[wd.cat])continue;
+      out.push({key:wd.jp,disp:wd.jp,sub:(wd.jp===wd.y?'':wd.y),r:wd.r,ko:wd.ko,say:wd.y,grp:wd.cat});}
+  }
+  return out;
+}
+function activePool(){let p=pool();if(cfg.rev){const f=p.filter(x=>!isMaster(x.key));if(f.length>=4)return f;}return p;}
+function weight(x){const p=progress[x.key];if(!p||p.s===0)return 6;return Math.max(1,Math.min(12,1+p.w*3-p.st));}
+function pickWeighted(list,avoid){const cand=list.length>1&&avoid?list.filter(x=>x.key!==avoid):list;
+  let tot=0;const ws=cand.map(x=>{const w=weight(x);tot+=w;return w;});let r=Math.random()*tot;
+  for(let i=0;i<cand.length;i++){r-=ws[i];if(r<=0)return cand[i];}return cand[cand.length-1];}
+
+/* speech */
+let jaVoice=null;
+function loadVoices(){const vs=window.speechSynthesis?speechSynthesis.getVoices():[];jaVoice=vs.find(v=>v.lang&&v.lang.toLowerCase().startsWith('ja'))||null;}
+if('speechSynthesis'in window){loadVoices();speechSynthesis.onvoiceschanged=loadVoices;}
+function say(t){try{if(!('speechSynthesis'in window))return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang='ja-JP';u.rate=.85;if(jaVoice)u.voice=jaVoice;speechSynthesis.speak(u);}catch{}}
+
+/* stats */
+function refreshStats(){
+  const p=pool();const total=p.length;const master=p.filter(x=>isMaster(x.key)).length;
+  let c=0,w=0;for(const x of p){const pr=progress[x.key];if(pr){c+=pr.c;w+=pr.w;}}
+  document.getElementById('stLabel').textContent=cfg.deck==='kana'?'익힌 글자':'익힌 단어';
+  stMaster.textContent=master;stTotal.textContent='/'+total;stBar.style.width=(total?master/total*100:0)+'%';
+  const acc=c+w>0?Math.round(c/(c+w)*100):null;stAcc.textContent=acc===null?'–':acc+'%';stAccBar.style.width=(acc||0)+'%';
+}
+
+/* ===== TABLE (kana) ===== */
+function renderTable(){
+  const sc=cfg.script; // hira | kata | both
+  const activeSets=Object.keys(SETS).filter(s=>cfg.sets[s]);
+  if(!activeSets.length){main.innerHTML='<div class="empty-msg">위에서 연습할 세트를 하나 이상 골라 주세요 🙂</div>';return;}
+  let html='';
+  for(const sk of activeSets){const g=SETS[sk].grid;let cells=0;let t='<table class="kana"><tbody>';
+    for(const row of g){t+='<tr>';for(const c of row){if(!c){t+='<td class="empty"></td>';continue;}cells++;
+      let inner,keys,done,dc;
+      if(sc==='both'){keys=[c.h,c.k];const ph=progress[c.h],pk=progress[c.k];
+        done=isMaster(c.h)&&isMaster(c.k);
+        const anyWrong=(ph&&ph.w>ph.c)||(pk&&pk.w>pk.c),anySeen=(ph&&ph.s)||(pk&&pk.s);
+        dc=done?'var(--teal)':(anyWrong?'var(--coral)':(anySeen?'var(--gold)':'transparent'));
+        inner=`<div class="cg-both jp">${c.h}</div><div class="cg-both k jp">${c.k}</div><div class="cr">${c.r}</div><div class="ck">${c.ko}</div>`;
+      }else{const disp=sc==='kata'?c.k:c.h;keys=[disp];const p=progress[disp];done=isMaster(disp);
+        dc=done?'var(--teal)':(p&&p.w>p.c?'var(--coral)':(p&&p.s?'var(--gold)':'transparent'));
+        inner=`<div class="cg jp">${disp}</div><div class="cr">${c.r}</div><div class="ck">${c.ko}</div>`;
+      }
+      t+=`<td class="hidden ${done?'done':''}" data-keys="${keys.join('|')}" data-say="${c.h}"><span class="dot" style="background:${dc}"></span>${inner}</td>`;}
+      t+='</tr>';}
+    t+='</tbody></table>';
+    const label=sc==='both'?'자 · 히라+가타 · 탭하면 읽기·발음':'자 · 탭하면 읽기·발음';
+    html+=`<div class="tbl-head"><h3>${SETS[sk].name}</h3><span class="cnt">${cells}${label}</span></div>`+t;}
+  main.innerHTML=html;
+  main.querySelectorAll('td[data-keys]').forEach(td=>td.onclick=()=>{const rev=!td.classList.contains('hidden');td.classList.toggle('hidden');say(td.dataset.say);
+    if(!rev){td.dataset.keys.split('|').forEach(k=>{const p=getP(k);p.s++;p.u=Date.now();});save();refreshStats();syncPush();}});
+}
+
+/* ===== LIST (travel) ===== */
+function renderList(){
+  const active=CATS.filter(([k])=>cfg.cats[k]);
+  if(!active.length){main.innerHTML='<div class="empty-msg">위에서 카테고리를 하나 이상 골라 주세요 🙂</div>';return;}
+  let html='';
+  for(const[ck,cname]of active){
+    const items=TRAVEL.filter(w=>w.cat===ck);
+    html+=`<div class="tbl-head"><h3>${cname}</h3><span class="cnt">${items.length}개 · 탭하면 뜻·발음</span></div>`;
+    for(const w of items){const p=progress[w.jp];const done=isMaster(w.jp);
+      const dc=done?'var(--teal)':(p&&p.w>p.c?'var(--coral)':(p&&p.s?'var(--gold)':'transparent'));
+      const yomi=w.jp===w.y?'':`<div class="wy jp">${w.y}</div>`;
+      html+=`<div class="wcard hidden ${done?'done':''}" data-key="${w.jp}" data-say="${w.y}"><span class="dot" style="background:${dc}"></span>
+        <div class="wl"><div class="wj jp">${w.jp}</div>${yomi}</div>
+        <div class="wr"><span class="wrom">${w.r}</span><span class="wko">${w.ko}</span></div></div>`;}
+  }
+  main.innerHTML=html;
+  main.querySelectorAll('.wcard').forEach(el=>el.onclick=()=>{const rev=!el.classList.contains('hidden');el.classList.toggle('hidden');say(el.dataset.say);if(!rev){const p=getP(el.dataset.key);p.s++;p.u=Date.now();save();refreshStats();syncPush();}});
+}
+
+/* ===== FLASH ===== */
+let flashCur=null,flashFlipped=false;
+function renderFlash(){
+  const list=activePool();
+  if(list.length<1){main.innerHTML='<div class="empty-msg">연습할 항목이 없어요.<br>세트·카테고리·복습 설정을 확인해 주세요.</div>';return;}
+  main.innerHTML=`<div class="flashwrap">
+    <div class="flip" id="flip"><div class="inner">
+      <div class="face front"><button class="spk" id="spk1">🔊</button><div class="big jp" id="fFront"></div><div class="sub jp" id="fSub"></div><div class="hint">탭하면 정답</div></div>
+      <div class="face back"><button class="spk" id="spk2">🔊</button><div class="big" id="fBack"></div><div class="line" id="fLine"></div><div class="hint">탭하면 뒤집기</div></div>
+    </div></div>
+    <div class="fbtns"><button class="b-no" id="fNo">아직 몰라요</button><button class="b-yes" id="fYes">알아요</button></div>
+    <div class="tap-h" id="fMeta"></div></div>`;
+  const flip=document.getElementById('flip');
+  flip.onclick=()=>{flashFlipped=!flashFlipped;flip.classList.toggle('flipped',flashFlipped);if(flashFlipped)say(flashCur.say);};
+  spk1.onclick=e=>{e.stopPropagation();say(flashCur.say);};
+  spk2.onclick=e=>{e.stopPropagation();say(flashCur.say);};
+  fNo.onclick=()=>grade(false);fYes.onclick=()=>grade(true);
+  nextFlash();
+}
+function nextFlash(){
+  const list=activePool();flashCur=pickWeighted(list,flashCur&&flashCur.key);flashFlipped=false;
+  const flip=document.getElementById('flip');if(flip)flip.classList.remove('flipped');
+  const kana=cfg.deck==='kana';
+  fFront.textContent=flashCur.disp;
+  fSub.textContent=flashCur.sub||'';fSub.style.display=flashCur.sub?'block':'none';
+  fFront.style.fontSize=kana?'110px':(flashCur.disp.length>5?'40px':'60px');
+  if(kana){fBack.textContent=flashCur.r;fBack.style.color='var(--teal)';fBack.style.fontSize='46px';fLine.textContent=flashCur.ko;fLine.style.color='var(--ink2)';}
+  else{fBack.textContent=flashCur.ko;fBack.style.color='var(--ink)';fBack.style.fontSize='30px';fLine.textContent=flashCur.sub?`${flashCur.sub} · ${flashCur.r}`:flashCur.r;fLine.style.color='var(--teal)';}
+  const p=progress[flashCur.key];fMeta.textContent=p?`정답 ${p.c} · 오답 ${p.w}`:'처음 보는 항목';
+}
+function grade(ok){const p=getP(flashCur.key);p.s++;if(ok){p.c++;p.st++;}else{p.w++;p.st=0;}p.u=Date.now();save();refreshStats();syncPush();nextFlash();}
+
+/* ===== QUIZ ===== */
+let quizCur=null,quizStreak=0,quizDone=0;
+function quizFields(){
+  if(cfg.deck==='kana'){const k2r=cfg.dir==='k2r';
+    return{pf:k2r?'disp':'r',af:k2r?'r':'disp',pJP:k2r,aJP:!k2r,sub:k2r?'이 글자의 로마자 발음은?':'이 발음의 글자는?',
+      segs:[['k2r','가나→로마자'],['r2k','로마자→가나']],cur:cfg.dir,set:v=>cfg.dir=v};}
+  const j2k=cfg.tdir==='j2k';
+  return{pf:j2k?'disp':'ko',af:j2k?'ko':'disp',pJP:j2k,aJP:!j2k,sub:j2k?'이 단어의 뜻은?':'이 뜻의 일본어는?',
+    segs:[['j2k','일본어→뜻'],['k2j','뜻→일본어']],cur:cfg.tdir,set:v=>cfg.tdir=v};
+}
+function renderQuiz(){
+  const list=activePool();
+  if(list.length<4){main.innerHTML='<div class="empty-msg">퀴즈는 항목이 4개 이상 필요해요.<br>세트·카테고리를 더 켜 주세요.</div>';return;}
+  const f=quizFields();
+  main.innerHTML=`<div class="quizwrap">
+    <div class="qbar"><div class="seg" id="qDir">${f.segs.map(([v,l])=>`<button data-dir="${v}" class="${f.cur===v?'on':''}">${l}</button>`).join('')}</div>
+      <button class="spk" id="qSpk" style="margin-left:auto;position:static">🔊</button></div>
+    <div class="qprompt"><div class="q" id="qQ"></div><div class="qy" id="qY"></div><div class="sub" id="qSub"></div></div>
+    <div class="choices" id="qChoices"></div>
+    <div class="qmeta"><span id="qStreak">연속 0</span><span id="qCount">푼 문제 0</span></div></div>`;
+  qDir.querySelectorAll('button').forEach(b=>b.onclick=()=>{f.set(b.dataset.dir);save();renderQuiz();});
+  qSpk.onclick=()=>{if(quizCur)say(quizCur.say);};
+  nextQuiz();
+}
+function nextQuiz(){
+  const list=activePool();const f=quizFields();quizCur=pickWeighted(list,quizCur&&quizCur.key);
+  const set=new Set([quizCur[f.af]]);const opts=[quizCur];let g=0;
+  while(opts.length<4&&g++<300){const c=list[Math.floor(Math.random()*list.length)];const a=c[f.af];if(set.has(a))continue;set.add(a);opts.push(c);}
+  for(let i=opts.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[opts[i],opts[j]]=[opts[j],opts[i]];}
+  const qEl=document.getElementById('qQ'),yEl=document.getElementById('qY'),subEl=document.getElementById('qSub');
+  const promptTxt=quizCur[f.pf];
+  qEl.className='q '+(f.pJP?'jp ':'')+((f.pJP&&promptTxt.length>5)?'small':'');
+  qEl.textContent=promptTxt;
+  yEl.textContent=(cfg.deck==='travel'&&f.pJP&&quizCur.sub)?quizCur.sub:'';
+  subEl.textContent=f.sub;
+  if(f.pJP)say(quizCur.say);
+  const box=document.getElementById('qChoices');box.innerHTML='';
+  for(const o of opts){const b=document.createElement('button');b.className='choice '+(f.aJP?'jp':'');b.textContent=o[f.af];b.dataset.k=o.key;b.onclick=()=>answer(b,o);box.appendChild(b);}
+}
+function answer(btn,opt){
+  const f=quizFields();const box=document.getElementById('qChoices');const correct=opt.key===quizCur.key;
+  const p=getP(quizCur.key);p.s++;if(correct){p.c++;p.st++;quizStreak++;}else{p.w++;p.st=0;quizStreak=0;}p.u=Date.now();
+  save();refreshStats();syncPush();say(quizCur.say);
+  [...box.children].forEach(b=>{b.disabled=true;if(b.dataset.k===quizCur.key)b.classList.add('ok');});
+  if(!correct)btn.classList.add('no');
+  quizDone++;document.getElementById('qStreak').textContent='연속 '+quizStreak;document.getElementById('qCount').textContent='푼 문제 '+quizDone;
+  setTimeout(nextQuiz,correct?550:1150);
+}
+
+/* ===== dispatch ===== */
+function render(){
+  const deck=cfg.deck;const nav=document.getElementById('nav');const statsRow=document.getElementById('statsRow');
+  if(deck==='sakerec'){
+    document.getElementById('hTitle').childNodes[0].nodeValue='추천 술';
+    document.getElementById('hSub').textContent='삿포로 이자카야 참고';
+    nav.style.display='none';statsRow.style.display='none';
+    renderSakeRec();return;
+  }
+  nav.style.display='';statsRow.style.display='';
+  document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.mode===mode));
+  const kana=deck==='kana';
+  document.getElementById('ic0').textContent=kana?'📋':'📖';
+  document.getElementById('lb0').textContent=kana?'표':'목록';
+  document.getElementById('hTitle').childNodes[0].nodeValue=kana?'가나 연습':'여행 단어';
+  document.getElementById('hSub').textContent=kana?'ひらがな · カタカナ':'삿포로·홋카이도';
+  if(mode==='table')kana?renderTable():renderList();
+  else if(mode==='flash')renderFlash();
+  else renderQuiz();
+  refreshStats();
+}
+function renderSakeRec(){
+  let html=`<div class="srec-intro"><div class="srec-h">🍶 추천 술 참고 (게 요리 · 이자카야)</div>
+    <p><b>日本酒度</b>(にほんしゅど·니혼슈도)는 단맛 지표 — <b style="color:var(--coral)">＋</b>가 클수록 드라이(辛口), <b style="color:var(--teal)">−</b>일수록 달아요(甘口).</p>
+    <p><b>등급</b>: 純米(준마이) → 特別純米(토쿠베츠) → 純米吟醸(긴조) → 純米大吟醸(다이긴조) 순으로 쌀을 더 깎아 향이 화사해집니다.</p>
+    <p><b style="color:var(--gold)">★</b> = 게 요리에 잘 맞거나 현재 인기 있는 술. 카드를 탭하면 발음이 나와요.</p></div>`;
+  for(const s of SAKEREC){
+    const parts=[s.region];if(s.grade)parts.push(s.grade);if(s.price)parts.push('¥'+s.price);
+    let smv='';if(s.smv){const col=s.smv.startsWith('+')?'var(--coral)':(s.smv.startsWith('-')||s.smv.startsWith('−')?'var(--teal)':'var(--ink3)');
+      smv=`<span class="srec-chip" style="color:${col}">日本酒度 ${s.smv}</span>`;}
+    html+=`<div class="srec" data-say="${s.y}"><div class="srec-top"><div class="srec-name jp">${s.jp}${s.star?'<span class="srec-star">★</span>':''}</div><button class="wspk">🔊</button></div>
+      <div class="srec-read">${s.y?`<span class="jp">${s.y}</span> · `:''}${s.ko}</div>
+      <div class="srec-meta">${parts.join(' · ')}${smv}</div>
+      ${s.note?`<div class="srec-note">${s.note}</div>`:''}</div>`;
+  }
+  main.innerHTML=html;
+  main.querySelectorAll('.srec').forEach(el=>el.onclick=()=>say(el.dataset.say));
+}
+function buildCatChips(){catChips.innerHTML=CATS.map(([k,n])=>`<button class="chip gold ${cfg.cats[k]?'on':''}" data-cat="${k}">${n}</button>`).join('');}
+function syncChips(){
+  deckSeg.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.deck===cfg.deck));
+  kanaChips.style.display=cfg.deck==='kana'?'block':'none';
+  travelChips.style.display=cfg.deck==='travel'?'block':'none';
+  scriptChips.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c.dataset.sc===cfg.script));
+  setChips.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',!!cfg.sets[c.dataset.set]));
+  catChips.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',!!cfg.cats[c.dataset.cat]));
+  dirSeg.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.dir===cfg.dir));
+  revSeg.querySelectorAll('button').forEach(b=>b.classList.toggle('on',String(cfg.rev)===b.dataset.rev));
+}
+
+/* events */
+deckSeg.onclick=e=>{const b=e.target.closest('button');if(!b)return;cfg.deck=b.dataset.deck;save();syncChips();render();};
+scriptChips.onclick=e=>{const c=e.target.closest('.chip');if(!c)return;cfg.script=c.dataset.sc;save();syncChips();render();};
+setChips.onclick=e=>{const c=e.target.closest('.chip');if(!c)return;const s=c.dataset.set;const on=Object.keys(cfg.sets).filter(k=>cfg.sets[k]);
+  if(cfg.sets[s]&&on.length===1){toast('최소 한 세트는 필요해요');return;}cfg.sets[s]=!cfg.sets[s];save();syncChips();render();};
+catChips.onclick=e=>{const c=e.target.closest('.chip');if(!c)return;const k=c.dataset.cat;const on=Object.keys(cfg.cats).filter(x=>cfg.cats[x]);
+  if(cfg.cats[k]&&on.length===1){toast('최소 한 카테고리는 필요해요');return;}cfg.cats[k]=!cfg.cats[k];save();syncChips();render();};
+nav.onclick=e=>{const b=e.target.closest('button');if(!b)return;mode=b.dataset.mode;render();};
+dirSeg.onclick=e=>{const b=e.target.closest('button');if(!b)return;cfg.dir=b.dataset.dir;save();syncChips();if(mode==='quiz'&&cfg.deck==='kana')renderQuiz();};
+revSeg.onclick=e=>{const b=e.target.closest('button');if(!b)return;cfg.rev=+b.dataset.rev;save();syncChips();render();};
+
+let toastT;function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),1600);}
+
+/* back-button layers */
+const uiStack=[];
+function pushHist(tag){try{history.pushState({t:tag},'');return true;}catch{return false;}}
+function openSheet(){document.getElementById('scrim').classList.add('show');document.getElementById('sheet').classList.add('show');uiStack.push({tag:'sheet',pushed:pushHist('sheet')});}
+function closeSheetDom(){document.getElementById('scrim').classList.remove('show');document.getElementById('sheet').classList.remove('show');}
+function uiBack(){const t=uiStack[uiStack.length-1];if(!t)return;if(t.pushed)history.back();else{uiStack.pop();closeSheetDom();}}
+window.addEventListener('popstate',()=>{if(!uiStack.length)return;const t=uiStack.pop();if(t.tag==='sheet')closeSheetDom();});
+gear.onclick=openSheet;document.getElementById('scrim').onclick=uiBack;
+
+/* backup */
+btnExport.onclick=()=>{const data={app:'kana',v:2,exported:Date.now(),progress,cfg};const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='kana-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('백업 파일을 내보냈어요');};
+btnImport.onclick=()=>fileImport.click();
+fileImport.onchange=e=>{const file=e.target.files[0];if(!file)return;const rd=new FileReader();
+  rd.onload=()=>{try{const d=JSON.parse(rd.result);if(d.progress){for(const k in d.progress){const a=progress[k]||{s:0,c:0,w:0,st:0};const b=d.progress[k];
+    progress[k]={s:Math.max(a.s,b.s||0),c:Math.max(a.c,b.c||0),w:Math.max(a.w,b.w||0),st:Math.max(a.st,b.st||0),u:Date.now()};}}
+    if(d.cfg){const keepCode=cfg.syncCode;cfg=Object.assign(cfg,d.cfg);cfg.syncCode=keepCode;}save();buildCatChips();syncChips();render();syncPush();toast('백업을 불러왔어요');}catch{toast('파일을 읽을 수 없어요');}};
+  rd.readAsText(file);fileImport.value='';};
+btnReset.onclick=()=>{if(confirm('진도를 모두 초기화할까요? (되돌릴 수 없어요)')){progress={};save();render();toast('초기화했어요');}};
+
+/* ===== 기기 간 동기화 (Firebase) =====
+   여행앱과 같은 Firebase 프로젝트를 재사용하되, 규칙이 열려 있는 'trips' 컬렉션에
+   'kana-' 접두어 문서로 저장 → 여행 데이터와 절대 섞이지 않고, 콘솔 설정 없이 동작. */
+let fdb=null,cloudOn=false,applyingRemote=false,syncSub=null,pushT=null;
+function docRef(){return fdb.collection('trips').doc('kana-'+cfg.syncCode);}
+function setSyncStatus(m,c){const el=document.getElementById('syncStatus');if(el){el.textContent=m;el.style.color=c||'var(--ink3)';}}
+function updateSyncUI(){
+  const inp=document.getElementById('syncCode');if(inp&&!inp.value)inp.value=cfg.syncCode||'';
+  const dc=document.getElementById('btnDisconnect');
+  if(cloudOn&&cfg.syncCode){setSyncStatus('☁️ 연결됨 · 코드: '+cfg.syncCode,'var(--teal)');if(dc)dc.style.display='';}
+  else{if(!cfg.syncCode)setSyncStatus('이 기기에만 저장 중','var(--ink3)');if(dc)dc.style.display='none';}
+}
+function initCloud(){
+  const c=window.FIREBASE_CONFIG;
+  if(!c||!c.apiKey||!window.firebase)return false;
+  try{if(!firebase.apps.length)firebase.initializeApp(c);fdb=firebase.firestore();return true;}
+  catch(e){console.warn('cloud init failed',e);return false;}
+}
+function cloudProgress(){ // Firestore에 저장할 형태(각 항목에 u 타임스탬프 보장)
+  const o={};for(const k in progress){const p=progress[k];o[k]={s:p.s||0,c:p.c||0,w:p.w||0,st:p.st||0,u:p.u||0};}return o;
+}
+function syncPush(){
+  if(!cloudOn||applyingRemote||!fdb||!cfg.syncCode)return;
+  clearTimeout(pushT);
+  pushT=setTimeout(()=>{try{docRef().set({progress:cloudProgress(),_updatedAt:Date.now(),_kana:true});}catch(e){console.warn('push failed',e);}},600);
+}
+function mergeRemote(rp){ // 항목별 최신(u) 우선 병합
+  if(!rp||typeof rp!=='object')return false;let changed=false;
+  for(const k in rp){const r=rp[k];if(!r||typeof r!=='object')continue;
+    const l=progress[k],ru=r.u||0,lu=l?(l.u||0):0;
+    if(!l||ru>lu){progress[k]={s:r.s||0,c:r.c||0,w:r.w||0,st:r.st||0,u:ru};changed=true;}}
+  return changed;
+}
+function subscribeSync(){
+  if(!cloudOn||!fdb||!cfg.syncCode)return;
+  if(syncSub){syncSub();syncSub=null;}
+  syncSub=docRef().onSnapshot(snap=>{
+    if(snap.metadata.hasPendingWrites)return; // 내가 방금 쓴 반향은 무시
+    if(!snap.exists)return;
+    if(mergeRemote(snap.data().progress)){applyingRemote=true;save();applyingRemote=false;render();toast('☁️ 다른 기기의 기록을 반영했어요');}
+  },err=>{console.warn('snapshot err',err);setSyncStatus('동기화 오류 ['+((err&&err.code)||'?')+']','var(--bad)');});
+}
+async function connectSync(code,opt){
+  opt=opt||{};code=(code||'').trim();
+  if(code.length<6){setSyncStatus('코드는 6자 이상으로 정해 주세요','var(--bad)');return false;}
+  cfg.syncCode=code;save();
+  if(!fdb&&!initCloud()){setSyncStatus('지금은 오프라인이라 연결할 수 없어요. 온라인에서 다시 시도하세요.','var(--bad)');cloudOn=false;updateSyncUI();return false;}
+  cloudOn=true;setSyncStatus('연결 중…','var(--gold)');
+  try{
+    const ref=docRef();const snap=await ref.get();
+    if(snap.exists&&mergeRemote(snap.data().progress)){applyingRemote=true;save();applyingRemote=false;render();}
+    await ref.set({progress:cloudProgress(),_updatedAt:Date.now(),_kana:true}); // 이 기기 진도도 올려 두기
+    subscribeSync();updateSyncUI();
+    if(!opt.silent)toast('☁️ 기기 간 동기화를 켰어요');
+    return true;
+  }catch(e){
+    const denied=e&&e.code==='permission-denied';
+    setSyncStatus(denied?'⚠️ 보안 규칙에서 막혔어요':'연결 실패 ['+((e&&e.code)||'네트워크')+']','var(--bad)');
+    if(opt.silent){/* 부팅 중 조용히 실패 → 구독만이라도 시도 */subscribeSync();}
+    return false;
+  }
+}
+function disconnectSync(){
+  if(syncSub){syncSub();syncSub=null;}
+  cloudOn=false;cfg.syncCode='';save();
+  const inp=document.getElementById('syncCode');if(inp)inp.value='';
+  updateSyncUI();toast('동기화를 껐어요 (이 기기에만 저장)');
+}
+function makeCode(){
+  const a='abcdefghijkmnpqrstuvwxyz23456789';let s='';
+  try{const arr=crypto.getRandomValues(new Uint32Array(10));for(let i=0;i<10;i++)s+=a[arr[i]%a.length];}
+  catch{for(let i=0;i<10;i++)s+=a[Math.floor(Math.random()*a.length)];}
+  return 'kana-'+s;
+}
+btnConnect.onclick=()=>connectSync(document.getElementById('syncCode').value);
+btnMakeCode.onclick=()=>{const c=makeCode();const inp=document.getElementById('syncCode');inp.value=c;connectSync(c);};
+btnDisconnect.onclick=disconnectSync;
+
+/* PWA */
+if('serviceWorker'in navigator){if(navigator.serviceWorker.controller){let reloaded=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(reloaded)return;reloaded=true;location.reload();});}
+  window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').then(r=>r.update()).catch(()=>{}));}
+
+/* boot */
+buildCatChips();syncChips();render();
+if(cfg.syncCode){connectSync(cfg.syncCode,{silent:true});}
+updateSyncUI();
+</script>
+</body>
+</html>

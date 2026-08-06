@@ -1,0 +1,21 @@
+# Netlify 설정 — 이 파일이 있으면 Import 시 설정을 물어보지 않습니다.
+[build]
+  publish = "."      # 정적 사이트: 루트를 그대로 배포
+  command = ""        # 빌드 과정 없음
+
+# HTML·서비스워커·매니페스트는 항상 최신을 확인하도록 캐시 비활성화.
+# (이렇게 해야 파일을 커밋했을 때 폰/PC 앱이 곧바로 최신본으로 갱신됩니다.)
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/manifest.json"
+  [headers.values]
+    Cache-Control = "no-cache"
