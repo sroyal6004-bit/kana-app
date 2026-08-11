@@ -188,6 +188,7 @@ nav button.on{color:var(--teal)}
   </div>
   <div class="chips" id="starRow" style="margin-top:8px">
     <button class="chip gold" id="starChip">⭐ 즐겨찾기만 보기</button>
+    <button class="chip" id="autoChip">🔈 자동 낭독</button>
   </div>
 </header>
 
@@ -650,7 +651,7 @@ function renderFlash(){
     <div class="fbtns"><button class="b-no" id="fNo">아직 몰라요</button><button class="b-yes" id="fYes">알아요</button></div>
     <div class="tap-h" id="fMeta"></div></div>`;
   const flip=document.getElementById('flip');
-  flip.onclick=()=>{flashFlipped=!flashFlipped;flip.classList.toggle('flipped',flashFlipped);if(flashFlipped)say(flashCur.say);};
+  flip.onclick=()=>{stopAuto();flashFlipped=!flashFlipped;flip.classList.toggle('flipped',flashFlipped);if(flashFlipped)say(flashCur.say);};
   spk1.onclick=e=>{e.stopPropagation();say(flashCur.say);};
   spk2.onclick=e=>{e.stopPropagation();say(flashCur.say);};
   document.getElementById('fStar').onclick=e=>{e.stopPropagation();toggleStar(flashCur.key);updateFlashStar();};
@@ -659,7 +660,9 @@ function renderFlash(){
 }
 function updateFlashStar(){const b=document.getElementById('fStar');if(b&&flashCur){const on=isStar(flashCur.key);b.classList.toggle('on',on);b.textContent=on?'★':'☆';}}
 function nextFlash(){
-  const list=activePool();flashCur=pickWeighted(list,flashCur&&flashCur.key);flashFlipped=false;
+  const list=activePool();flashCur=pickWeighted(list,flashCur&&flashCur.key);flashFlipped=false;paintFlash();
+}
+function paintFlash(){
   const flip=document.getElementById('flip');if(flip)flip.classList.remove('flipped');
   const kana=cfg.deck==='kana';
   fFront.textContent=flashCur.disp;
@@ -670,7 +673,40 @@ function nextFlash(){
   const p=progress[flashCur.key];fMeta.textContent=p?`정답 ${p.c} · 오답 ${p.w}`:'처음 보는 항목';
   updateFlashStar();
 }
-function grade(ok){const p=getP(flashCur.key);p.s++;if(ok){p.c++;p.st++;}else{p.w++;p.st=0;}p.u=Date.now();save();refreshStats();syncPush();nextFlash();}
+function grade(ok){stopAuto();const p=getP(flashCur.key);p.s++;if(ok){p.c++;p.st++;}else{p.w++;p.st=0;}p.u=Date.now();save();refreshStats();syncPush();nextFlash();}
+
+/* ===== 자동 낭독 (카드를 한 장씩 넘기며 읽어주기) ===== */
+let autoOn=false,autoT=null,autoFb=null,autoList=[],autoIdx=0;
+function speakSeq(text,cb){
+  try{
+    if(!('speechSynthesis'in window)){autoFb=setTimeout(cb,900);return;}
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(text);u.lang='ja-JP';u.rate=.85;if(jaVoice)u.voice=jaVoice;
+    let done=false;const fin=()=>{if(done)return;done=true;clearTimeout(autoFb);cb();};
+    u.onend=fin;u.onerror=fin;
+    autoFb=setTimeout(fin,Math.min(7000,1300+(text?text.length:0)*160)); // 발화 종료 이벤트 미발생 대비
+    speechSynthesis.speak(u);
+  }catch{autoFb=setTimeout(cb,900);}
+}
+function updateAutoBtn(){const b=document.getElementById('autoChip');if(!b)return;b.classList.toggle('on',autoOn);b.textContent=autoOn?'⏸ 낭독 멈춤':'🔈 자동 낭독';}
+function autoShowCurrent(){flashCur=autoList[autoIdx%autoList.length];flashFlipped=false;paintFlash();}
+function playAuto(){
+  if(!autoOn)return;
+  if(mode!=='flash'||!document.getElementById('flip')){stopAuto();return;}
+  autoShowCurrent();
+  speakSeq(flashCur.say,()=>{if(!autoOn)return;autoT=setTimeout(()=>{if(!autoOn)return;autoIdx++;playAuto();},650);});
+}
+function startAuto(){
+  autoList=activePool();
+  if(autoList.length<1){toast('낭독할 항목이 없어요');return;}
+  autoOn=true;updateAutoBtn();
+  if(mode!=='flash'){mode='flash';render();}            // 플래시 화면으로 전환
+  const i=flashCur?autoList.findIndex(x=>x.key===flashCur.key):-1;autoIdx=i>=0?i:0;
+  toast('🔈 자동 낭독 시작 · 다시 누르면 멈춤');
+  setTimeout(playAuto,180);
+}
+function stopAuto(){if(!autoOn){updateAutoBtn();return;}autoOn=false;if(autoT)clearTimeout(autoT);if(autoFb)clearTimeout(autoFb);try{speechSynthesis.cancel();}catch{}updateAutoBtn();}
+function toggleAuto(){autoOn?stopAuto():startAuto();}
 
 /* ===== QUIZ ===== */
 let quizCur=null,quizStreak=0,quizDone=0;
@@ -727,7 +763,7 @@ function render(){
     document.getElementById('hTitle').childNodes[0].nodeValue='추천 술';
     document.getElementById('hSub').textContent='삿포로 이자카야 참고';
     nav.style.display='none';statsRow.style.display='none';document.getElementById('starRow').style.display='none';
-    renderSakeRec();return;
+    stopAuto();renderSakeRec();return;
   }
   nav.style.display='';statsRow.style.display='';document.getElementById('starRow').style.display='';
   document.getElementById('starChip').classList.toggle('on',!!cfg.starOnly);
@@ -773,23 +809,24 @@ function syncChips(){
 }
 
 /* events */
-deckSeg.onclick=e=>{const b=e.target.closest('button');if(!b)return;cfg.deck=b.dataset.deck;save();syncChips();render();};
-scriptChips.onclick=e=>{const c=e.target.closest('.chip');if(!c)return;cfg.script=c.dataset.sc;save();syncChips();render();};
+deckSeg.onclick=e=>{const b=e.target.closest('button');if(!b)return;stopAuto();cfg.deck=b.dataset.deck;save();syncChips();render();};
+scriptChips.onclick=e=>{const c=e.target.closest('.chip');if(!c)return;stopAuto();cfg.script=c.dataset.sc;save();syncChips();render();};
 setChips.onclick=e=>{const c=e.target.closest('.chip');if(!c)return;const s=c.dataset.set;const on=Object.keys(cfg.sets).filter(k=>cfg.sets[k]);
-  if(cfg.sets[s]&&on.length===1){toast('최소 한 세트는 필요해요');return;}cfg.sets[s]=!cfg.sets[s];save();syncChips();render();};
+  if(cfg.sets[s]&&on.length===1){toast('최소 한 세트는 필요해요');return;}stopAuto();cfg.sets[s]=!cfg.sets[s];save();syncChips();render();};
 catChips.onclick=e=>{const c=e.target.closest('.chip');if(!c)return;const k=c.dataset.cat;const on=Object.keys(cfg.cats).filter(x=>cfg.cats[x]);
-  if(cfg.cats[k]&&on.length===1){toast('최소 한 카테고리는 필요해요');return;}cfg.cats[k]=!cfg.cats[k];save();syncChips();render();};
-nav.onclick=e=>{const b=e.target.closest('button');if(!b)return;mode=b.dataset.mode;render();};
-starChip.onclick=()=>{cfg.starOnly=cfg.starOnly?0:1;save();syncChips();render();if(cfg.starOnly)toast('⭐ 즐겨찾기한 것만 보여줘요');};
+  if(cfg.cats[k]&&on.length===1){toast('최소 한 카테고리는 필요해요');return;}stopAuto();cfg.cats[k]=!cfg.cats[k];save();syncChips();render();};
+nav.onclick=e=>{const b=e.target.closest('button');if(!b)return;stopAuto();mode=b.dataset.mode;render();};
+starChip.onclick=()=>{stopAuto();cfg.starOnly=cfg.starOnly?0:1;save();syncChips();render();if(cfg.starOnly)toast('⭐ 즐겨찾기한 것만 보여줘요');};
+autoChip.onclick=toggleAuto;
 dirSeg.onclick=e=>{const b=e.target.closest('button');if(!b)return;cfg.dir=b.dataset.dir;save();syncChips();if(mode==='quiz'&&cfg.deck==='kana')renderQuiz();};
-revSeg.onclick=e=>{const b=e.target.closest('button');if(!b)return;cfg.rev=+b.dataset.rev;save();syncChips();render();};
+revSeg.onclick=e=>{const b=e.target.closest('button');if(!b)return;stopAuto();cfg.rev=+b.dataset.rev;save();syncChips();render();};
 
 let toastT;function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),1600);}
 
 /* back-button layers */
 const uiStack=[];
 function pushHist(tag){try{history.pushState({t:tag},'');return true;}catch{return false;}}
-function openSheet(){document.getElementById('scrim').classList.add('show');document.getElementById('sheet').classList.add('show');uiStack.push({tag:'sheet',pushed:pushHist('sheet')});}
+function openSheet(){stopAuto();document.getElementById('scrim').classList.add('show');document.getElementById('sheet').classList.add('show');uiStack.push({tag:'sheet',pushed:pushHist('sheet')});}
 function closeSheetDom(){document.getElementById('scrim').classList.remove('show');document.getElementById('sheet').classList.remove('show');}
 function uiBack(){const t=uiStack[uiStack.length-1];if(!t)return;if(t.pushed)history.back();else{uiStack.pop();closeSheetDom();}}
 window.addEventListener('popstate',()=>{if(!uiStack.length)return;const t=uiStack.pop();if(t.tag==='sheet')closeSheetDom();});
