@@ -516,7 +516,7 @@ const LS='kana_progress_v1',LSC='kana_cfg_v1',LSF='kana_stars_v1';
 let progress=load(LS,{});
 let stars=load(LSF,{});   // 즐겨찾기: {key:{v:1|0, u:ms}}  (v=1 별표, v=0 해제)
 const catsDefault=Object.fromEntries(CATS.map(([k])=>[k,true]));
-let cfg=Object.assign({deck:'kana',script:'both',sets:{gojuon:true,dakuten:true,yoon:false},dir:'k2r',tdir:'j2k',rev:0,tableScript:'hira',cats:catsDefault,syncCode:'',starOnly:0},load(LSC,{}));
+let cfg=Object.assign({deck:'kana',script:'both',sets:{gojuon:true,dakuten:true,yoon:false},dir:'k2r',tdir:'j2k',fdir:'j2m',rev:0,tableScript:'hira',cats:catsDefault,syncCode:'',starOnly:0},load(LSC,{}));
 if(!cfg.cats)cfg.cats=catsDefault; for(const[k]of CATS)if(!(k in cfg.cats))cfg.cats[k]=true;
 let mode='table';
 function load(k,d){try{return JSON.parse(localStorage.getItem(k))||d}catch{return d}}
@@ -548,8 +548,8 @@ function pickWeighted(list,avoid){const cand=list.length>1&&avoid?list.filter(x=
   for(let i=0;i<cand.length;i++){r-=ws[i];if(r<=0)return cand[i];}return cand[cand.length-1];}
 
 /* speech */
-let jaVoice=null;
-function loadVoices(){const vs=window.speechSynthesis?speechSynthesis.getVoices():[];jaVoice=vs.find(v=>v.lang&&v.lang.toLowerCase().startsWith('ja'))||null;}
+let jaVoice=null,koVoice=null;
+function loadVoices(){const vs=window.speechSynthesis?speechSynthesis.getVoices():[];jaVoice=vs.find(v=>v.lang&&v.lang.toLowerCase().startsWith('ja'))||null;koVoice=vs.find(v=>v.lang&&v.lang.toLowerCase().startsWith('ko'))||null;}
 if('speechSynthesis'in window){loadVoices();speechSynthesis.onvoiceschanged=loadVoices;}
 function say(t){try{if(!('speechSynthesis'in window))return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang='ja-JP';u.rate=.85;if(jaVoice)u.voice=jaVoice;speechSynthesis.speak(u);}catch{}}
 
@@ -643,7 +643,12 @@ let flashCur=null,flashFlipped=false;
 function renderFlash(){
   const list=activePool();
   if(list.length<1){main.innerHTML='<div class="empty-msg">연습할 항목이 없어요.<br>세트·카테고리·복습 설정을 확인해 주세요.</div>';return;}
+  const kana=cfg.deck==='kana';
   main.innerHTML=`<div class="flashwrap">
+    <div class="seg" id="fDir" style="margin-bottom:2px">
+      <button data-fd="j2m" class="${cfg.fdir!=='m2j'?'on':''}">${kana?'가나→로마자':'일본어→뜻'}</button>
+      <button data-fd="m2j" class="${cfg.fdir==='m2j'?'on':''}">${kana?'로마자→가나':'뜻→일본어'}</button>
+    </div>
     <div class="flip" id="flip"><div class="inner">
       <div class="face front"><button class="starbtn" id="fStar" aria-label="즐겨찾기">☆</button><button class="spk" id="spk1">🔊</button><div class="big jp" id="fFront"></div><div class="sub jp" id="fSub"></div><div class="hint">탭하면 정답</div></div>
       <div class="face back"><button class="spk" id="spk2">🔊</button><div class="big" id="fBack"></div><div class="line" id="fLine"></div><div class="hint">탭하면 뒤집기</div></div>
@@ -651,10 +656,11 @@ function renderFlash(){
     <div class="fbtns"><button class="b-no" id="fNo">아직 몰라요</button><button class="b-yes" id="fYes">알아요</button></div>
     <div class="tap-h" id="fMeta"></div></div>`;
   const flip=document.getElementById('flip');
-  flip.onclick=()=>{stopAuto();flashFlipped=!flashFlipped;flip.classList.toggle('flipped',flashFlipped);if(flashFlipped)say(flashCur.say);};
+  flip.onclick=()=>{stopAuto();flashFlipped=!flashFlipped;flip.classList.toggle('flipped',flashFlipped);const r=autoReads();const s=flashFlipped?r.back:r.front;speakSeq(s.t,s.lang,()=>{});};
   spk1.onclick=e=>{e.stopPropagation();say(flashCur.say);};
   spk2.onclick=e=>{e.stopPropagation();say(flashCur.say);};
   document.getElementById('fStar').onclick=e=>{e.stopPropagation();toggleStar(flashCur.key);updateFlashStar();};
+  document.getElementById('fDir').onclick=e=>{const bt=e.target.closest('button');if(!bt)return;stopAuto();cfg.fdir=bt.dataset.fd;save();document.querySelectorAll('#fDir button').forEach(x=>x.classList.toggle('on',x.dataset.fd===cfg.fdir));paintFlash();};
   fNo.onclick=()=>grade(false);fYes.onclick=()=>grade(true);
   nextFlash();
 }
@@ -662,14 +668,34 @@ function updateFlashStar(){const b=document.getElementById('fStar');if(b&&flashC
 function nextFlash(){
   const list=activePool();flashCur=pickWeighted(list,flashCur&&flashCur.key);flashFlipped=false;paintFlash();
 }
+function fSizeJP(s){const n=(s||'').length;return n>12?'30px':n>8?'38px':n>5?'46px':'64px';}
+function fSizeKO(s){const n=(s||'').length;return n>12?'22px':n>8?'28px':n>5?'34px':'42px';}
+/* 방향(cfg.fdir)에 따라 앞/뒤 면에 무엇을 보여줄지 결정 */
+function flashViews(){
+  const x=flashCur,kana=cfg.deck==='kana',m2j=cfg.fdir==='m2j';
+  if(kana){
+    if(!m2j)return {fMain:x.disp,fSub:'',fJP:true,fSize:'110px', bMain:x.r,bJP:false,bColor:'var(--teal)',bSize:'46px', bLine:x.ko,bLineColor:'var(--ink2)'};
+    return {fMain:x.r,fSub:'',fJP:false,fSize:'60px', bMain:x.disp,bJP:true,bColor:'var(--ink)',bSize:(x.disp.length>1?'72px':'96px'), bLine:x.ko,bLineColor:'var(--teal)'};
+  }
+  if(!m2j)return {fMain:x.disp,fSub:x.sub||'',fJP:true,fSize:fSizeJP(x.disp), bMain:x.ko,bJP:false,bColor:'var(--ink)',bSize:fSizeKO(x.ko), bLine:(x.sub?`${x.sub} · ${x.r}`:x.r),bLineColor:'var(--teal)'};
+  return {fMain:x.ko,fSub:'',fJP:false,fSize:fSizeKO(x.ko), bMain:x.disp,bJP:true,bColor:'var(--ink)',bSize:fSizeJP(x.disp), bLine:(x.sub?`${x.sub} · ${x.r}`:x.r),bLineColor:'var(--teal)'};
+}
+/* 자동 낭독 때 앞/뒤 면에서 무엇을 어떤 언어로 읽을지 */
+function autoReads(){
+  const x=flashCur,kana=cfg.deck==='kana',m2j=cfg.fdir==='m2j';
+  if(kana)return {front:{t:x.say,lang:'ja'},back:{t:x.say,lang:'ja'}};
+  if(!m2j)return {front:{t:x.say,lang:'ja'},back:{t:x.ko,lang:'ko'}};
+  return {front:{t:x.ko,lang:'ko'},back:{t:x.say,lang:'ja'}};
+}
 function paintFlash(){
   const flip=document.getElementById('flip');if(flip)flip.classList.remove('flipped');
-  const kana=cfg.deck==='kana';
-  fFront.textContent=flashCur.disp;
-  fSub.textContent=flashCur.sub||'';fSub.style.display=flashCur.sub?'block':'none';
-  fFront.style.fontSize=kana?'110px':(flashCur.disp.length>5?'40px':'60px');
-  if(kana){fBack.textContent=flashCur.r;fBack.style.color='var(--teal)';fBack.style.fontSize='46px';fLine.textContent=flashCur.ko;fLine.style.color='var(--ink2)';}
-  else{fBack.textContent=flashCur.ko;fBack.style.color='var(--ink)';fBack.style.fontSize='30px';fLine.textContent=flashCur.sub?`${flashCur.sub} · ${flashCur.r}`:flashCur.r;fLine.style.color='var(--teal)';}
+  const v=flashViews();
+  fFront.className='big'+(v.fJP?' jp':'');
+  fFront.textContent=v.fMain;fFront.style.fontSize=v.fSize;
+  fSub.textContent=v.fSub||'';fSub.style.display=v.fSub?'block':'none';
+  fBack.className='big'+(v.bJP?' jp':'');
+  fBack.textContent=v.bMain;fBack.style.color=v.bColor;fBack.style.fontSize=v.bSize;
+  fLine.textContent=v.bLine||'';fLine.style.color=v.bLineColor||'var(--teal)';
   const p=progress[flashCur.key];fMeta.textContent=p?`정답 ${p.c} · 오답 ${p.w}`:'처음 보는 항목';
   updateFlashStar();
 }
@@ -677,24 +703,38 @@ function grade(ok){stopAuto();const p=getP(flashCur.key);p.s++;if(ok){p.c++;p.st
 
 /* ===== 자동 낭독 (카드를 한 장씩 넘기며 읽어주기) ===== */
 let autoOn=false,autoT=null,autoFb=null,autoList=[],autoIdx=0;
-function speakSeq(text,cb){
+function speakSeq(text,lang,cb){
+  if(typeof lang==='function'){cb=lang;lang='ja';}
   try{
-    if(!('speechSynthesis'in window)){autoFb=setTimeout(cb,900);return;}
+    if(!('speechSynthesis'in window)||!text){autoFb=setTimeout(cb,700);return;}
     speechSynthesis.cancel();
-    const u=new SpeechSynthesisUtterance(text);u.lang='ja-JP';u.rate=.85;if(jaVoice)u.voice=jaVoice;
+    const u=new SpeechSynthesisUtterance(text);
+    u.lang=lang==='ko'?'ko-KR':'ja-JP';u.rate=.85;
+    const v=lang==='ko'?koVoice:jaVoice;if(v)u.voice=v;
     let done=false;const fin=()=>{if(done)return;done=true;clearTimeout(autoFb);cb();};
     u.onend=fin;u.onerror=fin;
-    autoFb=setTimeout(fin,Math.min(7000,1300+(text?text.length:0)*160)); // 발화 종료 이벤트 미발생 대비
+    autoFb=setTimeout(fin,Math.min(7000,1200+text.length*160)); // 발화 종료 이벤트 미발생 대비
     speechSynthesis.speak(u);
-  }catch{autoFb=setTimeout(cb,900);}
+  }catch{autoFb=setTimeout(cb,700);}
 }
 function updateAutoBtn(){const b=document.getElementById('autoChip');if(!b)return;b.classList.toggle('on',autoOn);b.textContent=autoOn?'⏸ 낭독 멈춤':'🔈 자동 낭독';}
 function autoShowCurrent(){flashCur=autoList[autoIdx%autoList.length];flashFlipped=false;paintFlash();}
 function playAuto(){
   if(!autoOn)return;
   if(mode!=='flash'||!document.getElementById('flip')){stopAuto();return;}
-  autoShowCurrent();
-  speakSeq(flashCur.say,()=>{if(!autoOn)return;autoT=setTimeout(()=>{if(!autoOn)return;autoIdx++;playAuto();},650);});
+  autoShowCurrent();                        // 앞면 보여주기
+  const r=autoReads();
+  speakSeq(r.front.t,r.front.lang,()=>{      // 1) 앞면 읽기
+    if(!autoOn)return;
+    autoT=setTimeout(()=>{                   // 2) 잠깐 생각할 시간
+      if(!autoOn)return;
+      flashFlipped=true;const f=document.getElementById('flip');if(f)f.classList.add('flipped'); // 3) 카드 뒤집어 뜻 보여주기
+      speakSeq(r.back.t,r.back.lang,()=>{     // 4) 뒷면(뜻/정답) 읽어주기
+        if(!autoOn)return;
+        autoT=setTimeout(()=>{if(!autoOn)return;autoIdx++;playAuto();},900); // 5) 다음 카드
+      });
+    },1400);
+  });
 }
 function startAuto(){
   autoList=activePool();
